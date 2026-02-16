@@ -16,8 +16,10 @@ This page explains Kalbot in plain English.
   - NWS weather data (`weather.gov`).
   - Kalshi market price/volume snapshots for weather markets.
   - Kalbot's own paper orders/positions.
-- Demo:
-  - Bot intel leaderboard/copy feed is seeded demo data unless replaced by a real collector.
+- Bot intel:
+  - Real only when `KALBOT_BOT_INTEL_FEED_PATH` or `KALBOT_BOT_INTEL_FEED_URL` is configured.
+  - If no feed is configured, bot intel panels stay empty.
+  - Demo seeding is opt-in only (`KALBOT_BOT_INTEL_ALLOW_DEMO_SEED=true`).
 
 ## Fast way to follow (paper mode)
 
@@ -51,7 +53,7 @@ If one city has both fresh Kalshi snapshots and fresh weather forecasts, while o
 - `PnL`: profit/loss.
 - `Pass`: no trade signal.
 
-## What “good enough” looks like
+## What "good enough" looks like
 
 - Forecast freshness: ideally <= 60 minutes old.
 - Market snapshot freshness: ideally <= 10 minutes old.

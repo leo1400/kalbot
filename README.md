@@ -104,6 +104,23 @@ Daily run summaries are written to `artifacts/daily/<YYYY-MM-DD>/run-summary.jso
   - `artifacts/models/low_temp_model_latest.json`
 - Live signal publishing uses this model (with market-title condition parsing) before falling back.
 
+## Bot intel ingestion (real-first)
+
+- Daily worker now ingests bot intel only from configured feed sources:
+  - `KALBOT_BOT_INTEL_FEED_PATH` (local JSON file), or
+  - `KALBOT_BOT_INTEL_FEED_URL` (JSON endpoint).
+- By default, demo seeding is disabled:
+  - `KALBOT_BOT_INTEL_ALLOW_DEMO_SEED=false`
+- Example local feed file:
+  - `docs/bot-intel-feed.sample.json`
+- Example env for local testing:
+  - `KALBOT_BOT_INTEL_FEED_PATH=docs/bot-intel-feed.sample.json`
+- Feed format:
+  - `source`: string
+  - `snapshot_date`: `YYYY-MM-DD`
+  - `traders`: list of `{account_address, display_name, roi_pct, pnl_usd, volume_usd, ...}`
+  - `activity`: list of `{event_time, follower_alias, leader_account_address, market_ticker, side, contracts, pnl_usd}`
+
 ## Paper execution loop
 
 - `simulate_execution` now places paper orders from active signals using risk caps:

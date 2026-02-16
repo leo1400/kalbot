@@ -44,7 +44,13 @@ def _load_sources(cur) -> list[SourceProvenanceRow]:
           (SELECT MAX(created_at) FROM weather_forecasts) AS weather_last,
           (SELECT MAX(captured_at) FROM market_snapshots) AS kalshi_last,
           (SELECT MAX(event_time) FROM copy_activity_events) AS bot_last,
-          (SELECT COUNT(*) FROM copy_activity_events WHERE source <> 'kalbot_demo_seed') AS bot_non_demo_count
+          (SELECT COUNT(*) FROM copy_activity_events) AS bot_total_count,
+          (
+            SELECT COUNT(*)
+            FROM copy_activity_events
+            WHERE source ILIKE '%demo%'
+               OR source ILIKE '%seed%'
+          ) AS bot_synthetic_count
         """
     )
     row = cur.fetchone()
@@ -53,8 +59,17 @@ def _load_sources(cur) -> list[SourceProvenanceRow]:
     kalshi_age = _age_minutes(row["kalshi_last"])
     bot_age = _age_minutes(row["bot_last"])
 
-    bot_mode = "demo" if int(row["bot_non_demo_count"] or 0) == 0 else "real"
-    bot_note = "seeded demo intel feed" if bot_mode == "demo" else "non-demo activity observed"
+    bot_total = int(row["bot_total_count"] or 0)
+    bot_synthetic = int(row["bot_synthetic_count"] or 0)
+    if bot_total == 0:
+        bot_mode = "unavailable"
+        bot_note = "no bot intel feed rows ingested yet"
+    elif bot_synthetic == bot_total:
+        bot_mode = "demo"
+        bot_note = "all bot intel rows are synthetic/demo"
+    else:
+        bot_mode = "real"
+        bot_note = "non-demo bot intel activity observed"
 
     return [
         SourceProvenanceRow(

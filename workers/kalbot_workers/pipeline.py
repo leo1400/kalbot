@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from kalbot.bot_intel_repo import BotIntelRepositoryError, seed_demo_bot_intel
+from kalbot.bot_intel_repo import BotIntelRepositoryError, refresh_bot_intel
 from kalbot.kalshi_ingest import KalshiIngestError, ingest_kalshi_weather_markets
 from kalbot.modeling.low_temp_model import (
     build_low_temp_training_features,
@@ -118,7 +118,7 @@ class DailyPipeline:
 
     def update_bot_intel(self) -> str:
         try:
-            return seed_demo_bot_intel(self.run_date)
+            return refresh_bot_intel(self.run_date, settings=self.settings)
         except BotIntelRepositoryError as exc:
             return f"Skipped bot intel update: {exc}"
 

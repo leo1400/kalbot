@@ -63,25 +63,9 @@ def health() -> HealthResponse:
 @router.get("/v1/signals/current", response_model=list[SignalCard])
 def current_signals() -> list[SignalCard]:
     try:
-        signals = list_current_signals(limit=20)
-        if signals:
-            return signals
+        return list_current_signals(limit=20)
     except SignalRepositoryError:
-        # Keep API useful before DB is fully wired in every environment.
-        pass
-
-    return [
-        SignalCard(
-            market_ticker="WEATHER-NYC-BOOTSTRAP-HIGH-GT-45",
-            title="Bootstrap signal (DB not yet populated)",
-            probability_yes=0.61,
-            market_implied_yes=0.54,
-            edge=0.07,
-            confidence=0.69,
-            rationale="Run the daily worker to publish live rows into Postgres.",
-            data_source_url="https://www.weather.gov/",
-        )
-    ]
+        return []
 
 
 @router.get("/v1/signals/playbook", response_model=list[PlaybookSignal])

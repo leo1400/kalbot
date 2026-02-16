@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     )
     weather_forecast_hours: int = Field(default=24)
 
+    bot_intel_ingest_enabled: bool = Field(default=True)
+    bot_intel_feed_path: str | None = Field(default=None)
+    bot_intel_feed_url: str | None = Field(default=None)
+    bot_intel_source_name: str = Field(default="external_feed")
+    bot_intel_allow_demo_seed: bool = Field(default=False)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

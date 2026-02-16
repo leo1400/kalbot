@@ -22,3 +22,11 @@ def test_default_paper_risk_caps() -> None:
     assert settings.max_notional_per_signal_usd == 125.0
     assert settings.max_daily_notional_usd == 500.0
     assert settings.max_contracts_per_order == 25
+
+
+def test_default_bot_intel_is_real_first() -> None:
+    settings = Settings()
+    assert settings.bot_intel_ingest_enabled is True
+    assert settings.bot_intel_allow_demo_seed is False
+    assert settings.bot_intel_feed_path is None
+    assert settings.bot_intel_feed_url is None

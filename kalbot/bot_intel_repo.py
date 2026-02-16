@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
+from pathlib import Path
+from typing import Any
+from urllib.request import Request, urlopen
 
 from psycopg import errors
 
 from kalbot.db import get_connection
 from kalbot.schemas import BotLeaderboardEntry, CopyActivityEvent
+from kalbot.settings import Settings, get_settings
 
 
 class BotIntelRepositoryError(RuntimeError):
@@ -14,7 +19,7 @@ class BotIntelRepositoryError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class DemoTrader:
+class TraderSnapshotInput:
     platform: str
     account_address: str
     display_name: str
@@ -22,50 +27,51 @@ class DemoTrader:
     roi_pct: float
     pnl_usd: float
     volume_usd: float
+    win_rate_pct: float | None
+    impressiveness_score: float
     source: str
 
-    @property
-    def impressiveness_score(self) -> float:
-        return self.roi_pct
+
+@dataclass(frozen=True)
+class CopyEventInput:
+    event_time: datetime
+    follower_alias: str
+    leader_account_address: str
+    market_ticker: str
+    side: str
+    contracts: int
+    pnl_usd: float
+    source: str
 
 
-def seed_demo_bot_intel(run_date: date) -> str:
-    traders = [
-        DemoTrader(
-            platform="KALSHI",
-            account_address="0x4a1f...91bd",
-            display_name="TempEdge_Atlas",
-            entity_type="bot",
-            roi_pct=42.7,
-            pnl_usd=12840.21,
-            volume_usd=30092.33,
-            source="kalbot_demo_seed",
-        ),
-        DemoTrader(
-            platform="KALSHI",
-            account_address="0x7f88...0de1",
-            display_name="StormAlpha",
-            entity_type="bot",
-            roi_pct=36.2,
-            pnl_usd=9932.44,
-            volume_usd=27438.72,
-            source="kalbot_demo_seed",
-        ),
-        DemoTrader(
-            platform="KALSHI",
-            account_address="0x9bc2...4fa0",
-            display_name="PolarConvex",
-            entity_type="person",
-            roi_pct=31.1,
-            pnl_usd=7832.11,
-            volume_usd=25189.54,
-            source="kalbot_demo_seed",
-        ),
-    ]
+@dataclass(frozen=True)
+class BotIntelFeed:
+    snapshot_date: date
+    source: str
+    traders: list[TraderSnapshotInput]
+    activity: list[CopyEventInput]
+
+
+def refresh_bot_intel(run_date: date, settings: Settings | None = None) -> str:
+    cfg = settings or get_settings()
+    if not cfg.bot_intel_ingest_enabled:
+        return "Bot intel ingest disabled by config."
 
     try:
         with get_connection() as conn, conn.cursor() as cur:
-            for trader in traders:
+            purged = _purge_synthetic_rows(cur) if not cfg.bot_intel_allow_demo_seed else 0
+
+            feed = _load_feed_for_date(run_date=run_date, settings=cfg)
+            if feed is None:
+                if purged > 0:
+                    return f"No bot intel feed configured; skipped (purged {purged} synthetic rows)."
+                return "No bot intel feed configured; skipping."
+
+            trader_map: dict[str, int] = {}
+            snapshots_written = 0
+            events_written = 0
+
+            for trader in feed.traders:
                 cur.execute(
                     """
                     INSERT INTO tracked_traders (
@@ -88,7 +94,8 @@ def seed_demo_bot_intel(run_date: date) -> str:
                         trader.source,
                     ),
                 )
-                trader_id = cur.fetchone()["id"]
+                trader_id = int(cur.fetchone()["id"])
+                trader_map[trader.account_address] = trader_id
 
                 cur.execute(
                     """
@@ -96,7 +103,7 @@ def seed_demo_bot_intel(run_date: date) -> str:
                       trader_id, snapshot_date, window_name, roi_pct, pnl_usd, volume_usd,
                       win_rate_pct, impressiveness_score, source, created_at
                     )
-                    VALUES (%s, %s, 'all', %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, 'all', %s, %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT (trader_id, snapshot_date, window_name, source)
                     DO UPDATE SET
                       roi_pct = EXCLUDED.roi_pct,
@@ -107,44 +114,44 @@ def seed_demo_bot_intel(run_date: date) -> str:
                     """,
                     (
                         trader_id,
-                        run_date,
+                        feed.snapshot_date,
                         trader.roi_pct,
                         trader.pnl_usd,
                         trader.volume_usd,
-                        63.5,
+                        trader.win_rate_pct,
                         trader.impressiveness_score,
                         trader.source,
-                        datetime.now(timezone.utc),
                     ),
                 )
+                snapshots_written += int(cur.rowcount or 0)
 
-            cur.execute(
-                """
-                SELECT id FROM tracked_traders
-                WHERE platform = 'KALSHI' AND account_address = %s
-                """,
-                (traders[0].account_address,),
-            )
-            leader_id = cur.fetchone()["id"]
+            for event in feed.activity:
+                leader_id = trader_map.get(event.leader_account_address)
+                if leader_id is None:
+                    continue
 
-            events = [
-                ("RainRunner", f"WEATHER-NYC-{run_date.isoformat()}-HIGH-GT-45F", "yes", 8, 23.50),
-                ("CloudCutter", f"WEATHER-CHI-{run_date.isoformat()}-LOW-LT-28F", "no", 6, 17.10),
-                ("JetstreamJay", f"WEATHER-MIA-{run_date.isoformat()}-RAIN-GT-0.25", "yes", 5, -6.20),
-            ]
-            for follower_alias, market_ticker, side, contracts, pnl_usd in events:
                 cur.execute(
                     """
                     SELECT 1
                     FROM copy_activity_events
-                    WHERE source = 'kalbot_demo_seed'
+                    WHERE source = %s
                       AND event_time::date = %s
                       AND follower_alias = %s
+                      AND leader_trader_id = %s
                       AND market_ticker = %s
                       AND side = %s
+                      AND contracts = %s
                     LIMIT 1
                     """,
-                    (run_date, follower_alias, market_ticker, side),
+                    (
+                        event.source,
+                        event.event_time.date(),
+                        event.follower_alias,
+                        leader_id,
+                        event.market_ticker,
+                        event.side,
+                        event.contracts,
+                    ),
                 )
                 if cur.fetchone() is not None:
                     continue
@@ -154,26 +161,244 @@ def seed_demo_bot_intel(run_date: date) -> str:
                     INSERT INTO copy_activity_events (
                       event_time, follower_alias, leader_trader_id, market_ticker, side, contracts, pnl_usd, source
                     )
-                    VALUES (NOW(), %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
-                        follower_alias,
+                        event.event_time,
+                        event.follower_alias,
                         leader_id,
-                        market_ticker,
-                        side,
-                        contracts,
-                        pnl_usd,
-                        "kalbot_demo_seed",
+                        event.market_ticker,
+                        event.side,
+                        event.contracts,
+                        event.pnl_usd,
+                        event.source,
                     ),
                 )
+                events_written += int(cur.rowcount or 0)
     except errors.UndefinedTable as exc:
         raise BotIntelRepositoryError(
             "Bot intel schema missing. Apply infra/migrations/002_bot_intel.sql."
         ) from exc
     except Exception as exc:
-        raise BotIntelRepositoryError(f"Failed to seed bot intel: {exc}") from exc
+        raise BotIntelRepositoryError(f"Failed bot intel ingest: {exc}") from exc
 
-    return "Bot intel snapshot seeded."
+    return (
+        "Bot intel ingest complete: "
+        f"traders={len(feed.traders)}, snapshots={snapshots_written}, "
+        f"events={events_written}, source={feed.source}, purged_synthetic={purged}."
+    )
+
+
+def _purge_synthetic_rows(cur) -> int:
+    total = 0
+    cur.execute(
+        """
+        DELETE FROM copy_activity_events
+        WHERE source ILIKE '%demo%'
+           OR source ILIKE '%seed%'
+        """
+    )
+    total += int(cur.rowcount or 0)
+
+    cur.execute(
+        """
+        DELETE FROM trader_performance_snapshots
+        WHERE source ILIKE '%demo%'
+           OR source ILIKE '%seed%'
+        """
+    )
+    total += int(cur.rowcount or 0)
+
+    cur.execute(
+        """
+        DELETE FROM tracked_traders t
+        WHERE (t.source ILIKE '%demo%' OR t.source ILIKE '%seed%')
+          AND NOT EXISTS (
+            SELECT 1 FROM trader_performance_snapshots s WHERE s.trader_id = t.id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM copy_activity_events c WHERE c.leader_trader_id = t.id
+          )
+        """
+    )
+    total += int(cur.rowcount or 0)
+    return total
+
+
+def _load_feed_for_date(run_date: date, settings: Settings) -> BotIntelFeed | None:
+    payload: dict[str, Any] | None = None
+
+    if settings.bot_intel_feed_path:
+        path = Path(settings.bot_intel_feed_path)
+        if not path.exists():
+            raise BotIntelRepositoryError(f"Bot intel feed file not found: {path}")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    elif settings.bot_intel_feed_url:
+        req = Request(
+            url=settings.bot_intel_feed_url,
+            headers={"User-Agent": "kalbot-bot-intel/1.0", "Accept": "application/json"},
+            method="GET",
+        )
+        with urlopen(req, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    elif settings.bot_intel_allow_demo_seed:
+        payload = _build_demo_seed_payload(run_date)
+
+    if payload is None:
+        return None
+
+    return _parse_feed_payload(
+        payload=payload,
+        default_source=settings.bot_intel_source_name,
+        run_date=run_date,
+    )
+
+
+def _parse_feed_payload(payload: dict[str, Any], default_source: str, run_date: date) -> BotIntelFeed:
+    source = str(payload.get("source") or default_source).strip()
+    if not source:
+        source = "external_feed"
+
+    snapshot_text = str(payload.get("snapshot_date") or run_date.isoformat())
+    try:
+        snapshot_date = date.fromisoformat(snapshot_text)
+    except ValueError:
+        snapshot_date = run_date
+
+    traders = _parse_traders(payload.get("traders"), source)
+    activity = _parse_activity(payload.get("activity"), source, run_date)
+    return BotIntelFeed(snapshot_date=snapshot_date, source=source, traders=traders, activity=activity)
+
+
+def _parse_traders(raw: Any, source: str) -> list[TraderSnapshotInput]:
+    if not isinstance(raw, list):
+        return []
+
+    rows: list[TraderSnapshotInput] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        account = str(item.get("account_address") or "").strip()
+        display = str(item.get("display_name") or "").strip()
+        if not account or not display:
+            continue
+
+        roi_pct = _as_float(item.get("roi_pct"), 0.0)
+        rows.append(
+            TraderSnapshotInput(
+                platform=str(item.get("platform") or "KALSHI").upper(),
+                account_address=account,
+                display_name=display,
+                entity_type=str(item.get("entity_type") or "bot"),
+                roi_pct=roi_pct,
+                pnl_usd=_as_float(item.get("pnl_usd"), 0.0),
+                volume_usd=_as_float(item.get("volume_usd"), 0.0),
+                win_rate_pct=_as_float_or_none(item.get("win_rate_pct")),
+                impressiveness_score=_as_float(item.get("impressiveness_score"), roi_pct),
+                source=str(item.get("source") or source),
+            )
+        )
+    return rows
+
+
+def _parse_activity(raw: Any, source: str, run_date: date) -> list[CopyEventInput]:
+    if not isinstance(raw, list):
+        return []
+
+    rows: list[CopyEventInput] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        leader_account = str(item.get("leader_account_address") or "").strip()
+        follower = str(item.get("follower_alias") or "").strip()
+        ticker = str(item.get("market_ticker") or "").strip()
+        side = str(item.get("side") or "").strip().lower()
+        contracts = _as_int(item.get("contracts"), 0)
+        if not leader_account or not follower or not ticker or side not in {"yes", "no"} or contracts <= 0:
+            continue
+
+        rows.append(
+            CopyEventInput(
+                event_time=_parse_event_time(item.get("event_time"), run_date),
+                follower_alias=follower,
+                leader_account_address=leader_account,
+                market_ticker=ticker,
+                side=side,
+                contracts=contracts,
+                pnl_usd=_as_float(item.get("pnl_usd"), 0.0),
+                source=str(item.get("source") or source),
+            )
+        )
+    return rows
+
+
+def _parse_event_time(raw: Any, run_date: date) -> datetime:
+    if isinstance(raw, str) and raw.strip():
+        text = raw.strip()
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(text)
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        except ValueError:
+            pass
+    return datetime(run_date.year, run_date.month, run_date.day, 12, 0, tzinfo=timezone.utc)
+
+
+def _as_float(raw: Any, default: float) -> float:
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float_or_none(raw: Any) -> float | None:
+    try:
+        if raw is None:
+            return None
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_int(raw: Any, default: int) -> int:
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _build_demo_seed_payload(run_date: date) -> dict[str, Any]:
+    return {
+        "source": "kalbot_demo_seed",
+        "snapshot_date": run_date.isoformat(),
+        "traders": [
+            {
+                "platform": "KALSHI",
+                "account_address": "0x4a1f...91bd",
+                "display_name": "TempEdge_Atlas",
+                "entity_type": "bot",
+                "roi_pct": 42.7,
+                "pnl_usd": 12840.21,
+                "volume_usd": 30092.33,
+                "win_rate_pct": 63.5,
+                "impressiveness_score": 42.7,
+            }
+        ],
+        "activity": [
+            {
+                "event_time": f"{run_date.isoformat()}T12:00:00Z",
+                "follower_alias": "RainRunner",
+                "leader_account_address": "0x4a1f...91bd",
+                "market_ticker": f"WEATHER-NYC-{run_date.isoformat()}-HIGH-GT-45F",
+                "side": "yes",
+                "contracts": 8,
+                "pnl_usd": 23.5,
+            }
+        ],
+    }
 
 
 def get_bot_leaderboard(
@@ -244,49 +469,18 @@ def get_bot_leaderboard(
 
 def list_recent_copy_activity(limit: int = 20) -> list[CopyActivityEvent]:
     query = """
-        WITH ranked AS (
-          SELECT
-            c.event_time,
-            c.follower_alias,
-            c.leader_trader_id,
-            c.market_ticker,
-            c.side,
-            c.contracts,
-            c.pnl_usd,
-            ROW_NUMBER() OVER (
-              PARTITION BY
-                c.follower_alias,
-                c.leader_trader_id,
-                c.market_ticker,
-                c.side,
-                c.contracts,
-                c.pnl_usd,
-                c.event_time::date
-              ORDER BY c.event_time DESC
-            ) AS rn
-          FROM copy_activity_events c
-        )
         SELECT
-          r.event_time,
-          r.follower_alias,
+          c.event_time,
+          c.follower_alias,
           t.display_name AS leader_display_name,
-          r.market_ticker,
+          c.market_ticker,
           c.source,
-          r.side,
-          r.contracts,
-          r.pnl_usd
-        FROM ranked r
-        JOIN copy_activity_events c
-          ON c.event_time = r.event_time
-         AND c.follower_alias = r.follower_alias
-         AND c.leader_trader_id = r.leader_trader_id
-         AND c.market_ticker = r.market_ticker
-         AND c.side = r.side
-         AND c.contracts = r.contracts
-         AND c.pnl_usd = r.pnl_usd
-        JOIN tracked_traders t ON t.id = r.leader_trader_id
-        WHERE r.rn = 1
-        ORDER BY r.event_time DESC
+          c.side,
+          c.contracts,
+          c.pnl_usd
+        FROM copy_activity_events c
+        JOIN tracked_traders t ON t.id = c.leader_trader_id
+        ORDER BY c.event_time DESC
         LIMIT %s
     """
 

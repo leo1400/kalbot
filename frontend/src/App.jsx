@@ -352,7 +352,7 @@ export function App() {
       <section className="panel">
         <div className="section-head">
           <h2>Source Integrity</h2>
-          <p className="small">Shows what is real data vs demo data, and city-level feed readiness.</p>
+          <p className="small">Shows source freshness and whether each feed is real, unavailable, or synthetic.</p>
         </div>
         <div className="source-grid">
           {(provenance?.sources ?? []).map((source) => (
@@ -607,7 +607,7 @@ export function App() {
             ))}
 
             {activity.length === 0 && !error ? (
-              <p className="small">No activity yet. The worker seeds starter events each run.</p>
+              <p className="small">No activity yet. Configure a bot intel feed path or URL to populate this tape.</p>
             ) : null}
           </div>
         </section>

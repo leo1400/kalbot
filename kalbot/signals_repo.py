@@ -203,10 +203,7 @@ def get_dashboard_summary() -> DashboardSummary:
 
 
 def publish_best_signal_for_date(run_date: date) -> str:
-    try:
-        return publish_live_low_temp_signals(run_date)
-    except SignalRepositoryError:
-        return publish_demo_signal_for_date(run_date)
+    return publish_live_low_temp_signals(run_date)
 
 
 def publish_live_low_temp_signals(run_date: date) -> str:
@@ -365,125 +362,6 @@ def publish_live_low_temp_signals(run_date: date) -> str:
         raise SignalRepositoryError(f"Failed to publish live low-temp signals: {exc}") from exc
 
     return f"Published {len(published_tickers)} live signals: {', '.join(published_tickers)}."
-
-
-def publish_demo_signal_for_date(run_date: date) -> str:
-    settings: Settings = get_settings()
-
-    market_ticker = f"WEATHER-NYC-{run_date.isoformat()}-HIGH-GT-45F"
-    event_ticker = f"WEATHER-NYC-{run_date.isoformat()}"
-    title = f"NYC high temperature above 45F on {run_date.isoformat()}?"
-    now = datetime.now(timezone.utc)
-
-    try:
-        with get_connection() as conn, conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO markets (
-                  kalshi_market_id, event_ticker, market_ticker, title, close_time, settle_time
-                )
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (kalshi_market_id)
-                DO UPDATE SET updated_at = NOW()
-                RETURNING id
-                """,
-                (market_ticker, event_ticker, market_ticker, title, now, now),
-            )
-            market_id = cur.fetchone()["id"]
-
-            cur.execute(
-                """
-                INSERT INTO market_snapshots (
-                  market_id, bid_yes, ask_yes, last_price_yes, volume, captured_at
-                )
-                VALUES (%s, %s, %s, %s, %s, NOW())
-                """,
-                (market_id, 0.53, 0.55, 0.54, 1200),
-            )
-
-            cur.execute(
-                """
-                INSERT INTO model_runs (
-                  model_name, run_type, training_start, training_end,
-                  validation_score, calibration_error, metadata
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
-                RETURNING id
-                """,
-                (
-                    settings.model_name,
-                    "daily",
-                    now,
-                    now,
-                    0.182,
-                    0.031,
-                    '{"source":"demo-seed","note":"replace with real trainer output"}',
-                ),
-            )
-            model_run_id = cur.fetchone()["id"]
-
-            cur.execute(
-                """
-                INSERT INTO predictions (
-                  model_run_id, market_id, prob_yes, ci_low, ci_high, predicted_at
-                )
-                VALUES (%s, %s, %s, %s, %s, NOW())
-                RETURNING id
-                """,
-                (model_run_id, market_id, 0.61, 0.55, 0.67),
-            )
-            prediction_id = cur.fetchone()["id"]
-
-            cur.execute(
-                """
-                INSERT INTO trade_decisions (
-                  prediction_id, edge, threshold, approved, reason, created_at
-                )
-                VALUES (%s, %s, %s, %s, %s, NOW())
-                """,
-                (
-                    prediction_id,
-                    0.07,
-                    0.03,
-                    True,
-                    "Demo edge exceeds paper threshold. Replace with model-driven rules.",
-                ),
-            )
-
-            cur.execute(
-                """
-                INSERT INTO published_signals (
-                  market_id, model_run_id, confidence, rationale, data_source_url, is_active, published_at
-                )
-                VALUES (%s, %s, %s, %s, %s, TRUE, NOW())
-                """,
-                (
-                    market_id,
-                    model_run_id,
-                    0.69,
-                    "Demo published signal seeded by daily worker. Replace with real features and model output.",
-                    "https://www.weather.gov/",
-                ),
-            )
-            # Keep only the latest published row active for this market.
-            cur.execute(
-                """
-                UPDATE published_signals
-                SET is_active = FALSE
-                WHERE market_id = %s
-                  AND model_run_id <> %s
-                  AND is_active = TRUE
-                """,
-                (market_id, model_run_id),
-            )
-    except errors.UndefinedTable as exc:
-        raise SignalRepositoryError(
-            "Schema not found. Apply infra/migrations/001_initial_schema.sql first."
-        ) from exc
-    except Exception as exc:
-        raise SignalRepositoryError(f"Failed to publish demo signal: {exc}") from exc
-
-    return f"Published demo signal for {market_ticker}."
 
 
 def _evaluate_low_temp_market_candidate(

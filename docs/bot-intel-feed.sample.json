@@ -1,0 +1,48 @@
+{
+  "source": "example_external_feed",
+  "snapshot_date": "2026-02-16",
+  "traders": [
+    {
+      "platform": "KALSHI",
+      "account_address": "0xleader001",
+      "display_name": "TempEdge_Atlas",
+      "entity_type": "bot",
+      "roi_pct": 14.2,
+      "pnl_usd": 3265.45,
+      "volume_usd": 11890.22,
+      "win_rate_pct": 61.3,
+      "impressiveness_score": 14.2
+    },
+    {
+      "platform": "KALSHI",
+      "account_address": "0xleader002",
+      "display_name": "StormAlpha",
+      "entity_type": "bot",
+      "roi_pct": 9.7,
+      "pnl_usd": 1804.11,
+      "volume_usd": 9342.0,
+      "win_rate_pct": 58.2,
+      "impressiveness_score": 9.7
+    }
+  ],
+  "activity": [
+    {
+      "event_time": "2026-02-16T16:04:05Z",
+      "follower_alias": "RainRunner",
+      "leader_account_address": "0xleader001",
+      "market_ticker": "KXLOWTLAX-26FEB17-T51",
+      "side": "yes",
+      "contracts": 7,
+      "pnl_usd": 12.7
+    },
+    {
+      "event_time": "2026-02-16T16:09:10Z",
+      "follower_alias": "CloudCutter",
+      "leader_account_address": "0xleader002",
+      "market_ticker": "KXLOWTPHIL-26FEB17-B35.5",
+      "side": "no",
+      "contracts": 4,
+      "pnl_usd": 6.1
+    }
+  ]
+}
