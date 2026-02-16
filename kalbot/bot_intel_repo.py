@@ -93,11 +93,11 @@ def seed_demo_bot_intel(run_date: date) -> str:
                 cur.execute(
                     """
                     INSERT INTO trader_performance_snapshots (
-                      trader_id, snapshot_date, window, roi_pct, pnl_usd, volume_usd,
+                      trader_id, snapshot_date, window_name, roi_pct, pnl_usd, volume_usd,
                       win_rate_pct, impressiveness_score, source, created_at
                     )
                     VALUES (%s, %s, 'all', %s, %s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (trader_id, snapshot_date, window, source)
+                    ON CONFLICT (trader_id, snapshot_date, window_name, source)
                     DO UPDATE SET
                       roi_pct = EXCLUDED.roi_pct,
                       pnl_usd = EXCLUDED.pnl_usd,
@@ -173,7 +173,7 @@ def get_bot_leaderboard(
               ORDER BY s.snapshot_date DESC, s.created_at DESC
             ) AS rn
           FROM trader_performance_snapshots s
-          WHERE s.window = %s
+          WHERE s.window_name = %s
         )
         SELECT
           t.platform,

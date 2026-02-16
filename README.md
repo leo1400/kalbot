@@ -32,14 +32,17 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
    - `docker compose up -d`
    - or `docker compose -f infra/docker-compose.yml up -d`
 5. Apply migration:
-   - `psql "postgresql://postgres:postgres@localhost:5432/kalbot" -f infra/migrations/001_initial_schema.sql`
-   - `psql "postgresql://postgres:postgres@localhost:5432/kalbot" -f infra/migrations/002_bot_intel.sql`
+   - `scripts\apply-migrations.cmd`
+   - or `powershell -ExecutionPolicy Bypass -File .\scripts\apply-migrations.ps1`
+   - Optional (if local `psql` is installed):
+     - `psql "postgresql://postgres:postgres@localhost:5432/kalbot" -f infra/migrations/001_initial_schema.sql`
+     - `psql "postgresql://postgres:postgres@localhost:5432/kalbot" -f infra/migrations/002_bot_intel.sql`
 6. Start backend:
-   - `./scripts/start-backend.ps1`
+   - `scripts\start-backend.cmd`
 7. Run daily pipeline stub:
-   - `./scripts/run-daily.ps1`
+   - `scripts\run-daily.cmd`
 8. Start frontend:
-   - `./scripts/start-frontend.ps1`
+   - `scripts\start-frontend.cmd`
 
 ## Live local view
 

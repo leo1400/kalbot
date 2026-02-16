@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS trader_performance_snapshots (
   id BIGSERIAL PRIMARY KEY,
   trader_id BIGINT NOT NULL REFERENCES tracked_traders(id),
   snapshot_date DATE NOT NULL,
-  window TEXT NOT NULL,
+  window_name TEXT NOT NULL,
   roi_pct NUMERIC(12, 4) NOT NULL,
   pnl_usd NUMERIC(14, 2) NOT NULL,
   volume_usd NUMERIC(14, 2) NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS trader_performance_snapshots (
   impressiveness_score NUMERIC(12, 4) NOT NULL,
   source TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE(trader_id, snapshot_date, window, source)
+  UNIQUE(trader_id, snapshot_date, window_name, source)
 );
 
 CREATE TABLE IF NOT EXISTS copy_activity_events (
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS copy_activity_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_trader_perf_window_score
-  ON trader_performance_snapshots(window, impressiveness_score DESC);
+  ON trader_performance_snapshots(window_name, impressiveness_score DESC);
 
 CREATE INDEX IF NOT EXISTS idx_copy_events_event_time
   ON copy_activity_events(event_time DESC);
