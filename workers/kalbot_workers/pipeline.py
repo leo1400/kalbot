@@ -8,6 +8,10 @@ from typing import Callable
 
 from kalbot.bot_intel_repo import BotIntelRepositoryError, seed_demo_bot_intel
 from kalbot.kalshi_ingest import KalshiIngestError, ingest_kalshi_weather_markets
+from kalbot.modeling.low_temp_model import (
+    build_low_temp_training_features,
+    train_low_temp_model,
+)
 from kalbot.signals_repo import SignalRepositoryError, publish_best_signal_for_date
 from kalbot.settings import get_settings
 from kalbot.weather_ingest import WeatherIngestError, ingest_weather_data
@@ -80,12 +84,27 @@ class DailyPipeline:
         return " | ".join(messages)
 
     def build_features(self) -> str:
-        return "Feature builder stub complete (rolling windows pending)."
+        try:
+            summary = build_low_temp_training_features(self.run_date.isoformat())
+            return (
+                "Feature build complete: "
+                f"examples={summary.examples}, stations={summary.stations}, "
+                f"path={summary.output_path}"
+            )
+        except Exception as exc:
+            return f"Feature build skipped: {exc}"
 
     def train_and_calibrate(self) -> str:
-        return (
-            "Training stub complete (baseline model placeholder, calibration pending)."
-        )
+        try:
+            summary = train_low_temp_model(self.run_date.isoformat())
+            return (
+                "Model train complete: "
+                f"samples={summary.samples}, stations={summary.stations}, "
+                f"sigma={summary.global_sigma_f:.2f}F, rmse={summary.rmse_f:.2f}F, "
+                f"path={summary.output_path}"
+            )
+        except Exception as exc:
+            return f"Model train skipped: {exc}"
 
     def score_and_decide(self) -> str:
         return "Decision stub complete (edge thresholds and risk caps pending)."

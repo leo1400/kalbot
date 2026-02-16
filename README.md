@@ -82,3 +82,11 @@ Daily run summaries are written to `artifacts/daily/<YYYY-MM-DD>/run-summary.jso
   - `KALBOT_KALSHI_WEATHER_CATEGORY`
   - `KALBOT_KALSHI_WEATHER_SERIES_LIMIT`
   - `KALBOT_KALSHI_MARKETS_PER_SERIES`
+
+## Baseline model loop
+
+- `build_features` step writes low-temp training examples to:
+  - `artifacts/features/<date>/low_temp_training_examples.json`
+- `train_and_calibrate` step trains a baseline low-temp uncertainty model and writes:
+  - `artifacts/models/low_temp_model_latest.json`
+- Live signal publishing uses this model (with market-title condition parsing) before falling back.

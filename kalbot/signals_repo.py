@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from psycopg import errors
 
 from kalbot.db import get_connection
+from kalbot.modeling.low_temp_model import load_low_temp_model
 from kalbot.schemas import SignalCard
 from kalbot.settings import Settings, get_settings
 
@@ -97,35 +98,39 @@ def publish_live_low_temp_signal(run_date: date) -> str:
                   m.market_ticker,
                   m.title,
                   m.close_time,
-                  COALESCE(ms.last_price_yes, 0.50) AS market_implied_yes
+                  COALESCE(ms.last_price_yes, 0.50) AS market_implied_yes,
+                  COALESCE(ms.volume, 0) AS market_volume
                 FROM markets m
                 LEFT JOIN LATERAL (
-                  SELECT last_price_yes
+                  SELECT last_price_yes, volume
                   FROM market_snapshots ms
                   WHERE ms.market_id = m.id
                   ORDER BY ms.captured_at DESC
                   LIMIT 1
                 ) ms ON TRUE
-                WHERE m.market_ticker LIKE 'KXLOWT%-%-T%'
+                WHERE m.market_ticker LIKE 'KXLOWT%-26%'
                   AND (m.close_time IS NULL OR m.close_time > NOW())
-                ORDER BY m.close_time ASC NULLS LAST
+                ORDER BY m.close_time ASC NULLS LAST, COALESCE(ms.volume, 0) DESC
                 LIMIT 1
                 """
             )
             market = cur.fetchone()
             if not market:
-                raise SignalRepositoryError("No live KXLOWTNYC market available.")
+                raise SignalRepositoryError("No live KXLOWT market available.")
 
-            threshold = _extract_temperature_threshold(market["market_ticker"])
-            if threshold is None:
-                raise SignalRepositoryError("Could not parse threshold from market ticker.")
+            condition = _parse_low_temp_condition(str(market["title"]))
+            if condition is None:
+                threshold = _extract_temperature_threshold(market["market_ticker"])
+                if threshold is None:
+                    raise SignalRepositoryError("Could not parse low-temp condition.")
+                condition = {"kind": "gt", "low": threshold, "high": None}
             city_code = _extract_low_temp_city_code(market["market_ticker"])
             if not city_code:
                 raise SignalRepositoryError("Could not parse city code from market ticker.")
 
             cur.execute(
                 """
-                SELECT value, unit, valid_at
+                SELECT station_id, value, unit, valid_at
                 FROM weather_forecasts
                 WHERE station_id = ANY(%s)
                   AND metric = 'temperature'
@@ -140,18 +145,37 @@ def publish_live_low_temp_signal(run_date: date) -> str:
             forecast_temps_f = [_to_fahrenheit(float(r["value"]), str(r["unit"])) for r in rows]
             projected_low_f = min(forecast_temps_f) if forecast_temps_f else None
 
+            trained_model = load_low_temp_model()
+            model_version = (
+                str(trained_model.get("version"))
+                if trained_model and trained_model.get("version")
+                else "low-temp-heuristic-fallback"
+            )
+            station_id = str(rows[0]["station_id"]) if rows else _station_candidates(city_code)[0]
+            sigma_f = _resolve_sigma_f(trained_model, station_id)
+
             if projected_low_f is not None:
-                model_prob_yes = _sigmoid((threshold - projected_low_f) / 3.5)
-                model_prob_yes = _clamp(model_prob_yes, 0.02, 0.98)
+                model_prob_yes = _condition_probability(
+                    condition=condition, mu_f=projected_low_f, sigma_f=sigma_f
+                )
+                model_prob_yes = _clamp(model_prob_yes, 0.01, 0.99)
+                sample_bonus = (
+                    min(0.1, float(trained_model.get("samples", 0)) / 500.0)
+                    if trained_model
+                    else 0.0
+                )
                 confidence = _clamp(
-                    0.55 + abs(model_prob_yes - market_implied_yes), 0.55, 0.95
+                    0.60 + min(0.25, abs(model_prob_yes - market_implied_yes) * 1.5) + sample_bonus,
+                    0.55,
+                    0.97,
                 )
             else:
                 model_prob_yes = market_implied_yes
                 confidence = 0.55
 
-            ci_low = _clamp(model_prob_yes - 0.08, 0.01, 0.99)
-            ci_high = _clamp(model_prob_yes + 0.08, 0.01, 0.99)
+            spread = _clamp(min(0.2, sigma_f / 20.0), 0.05, 0.20)
+            ci_low = _clamp(model_prob_yes - spread, 0.01, 0.99)
+            ci_high = _clamp(model_prob_yes + spread, 0.01, 0.99)
             edge = model_prob_yes - market_implied_yes
 
             cur.execute(
@@ -164,16 +188,20 @@ def publish_live_low_temp_signal(run_date: date) -> str:
                 RETURNING id
                 """,
                 (
-                    settings.model_name,
-                    "heuristic_low_temp",
+                    f"{settings.model_name}:{model_version}",
+                    "trained_low_temp",
                     now,
                     now,
                     None,
                     None,
                     (
                         "{"
-                        f"\"threshold_f\": {threshold}, "
-                        f"\"projected_low_f\": {projected_low_f:.2f}, "
+                        f"\"condition\": \"{condition['kind']}\", "
+                        f"\"condition_low_f\": {condition['low']}, "
+                        f"\"condition_high_f\": {('null' if condition['high'] is None else condition['high'])}, "
+                        f"\"projected_low_f\": {('null' if projected_low_f is None else f'{projected_low_f:.2f}')}, "
+                        f"\"sigma_f\": {sigma_f:.3f}, "
+                        f"\"station_id\": \"{station_id}\", "
                         f"\"market_implied_yes\": {market_implied_yes:.4f}"
                         "}"
                     ),
@@ -195,8 +223,8 @@ def publish_live_low_temp_signal(run_date: date) -> str:
 
             approved = edge >= 0.03
             reason = (
-                f"Heuristic low-temp model edge={edge:.3f} "
-                f"(city={city_code}, threshold={threshold}F, "
+                f"Low-temp model edge={edge:.3f} "
+                f"(city={city_code}, condition={condition['kind']}, "
                 f"projected_low={'n/a' if projected_low_f is None else f'{projected_low_f:.1f}F'})"
             )
             cur.execute(
@@ -211,13 +239,14 @@ def publish_live_low_temp_signal(run_date: date) -> str:
 
             if projected_low_f is not None:
                 rationale = (
-                    f"Kalbot live heuristic: market asks if {city_code} low <= {threshold}F. "
-                    f"NWS forecast projects low around {projected_low_f:.1f}F before close. "
+                    f"Kalbot live low-temp model ({model_version}): {city_code} market condition "
+                    f"{_condition_label(condition)}. NWS projects low around {projected_low_f:.1f}F "
+                    f"(sigma={sigma_f:.1f}F). "
                     f"Model YES={model_prob_yes:.1%} vs market YES={market_implied_yes:.1%}."
                 )
             else:
                 rationale = (
-                    f"Kalbot live market-only fallback for {city_code} <= {threshold}F. "
+                    f"Kalbot market-only fallback for {city_code} {_condition_label(condition)}. "
                     f"No matching weather forecast rows found, so model mirrors market "
                     f"YES={market_implied_yes:.1%}."
                 )
@@ -271,7 +300,7 @@ def publish_live_low_temp_signal(run_date: date) -> str:
 
     return (
         "Published live low-temp signal for "
-        f"{market['market_ticker']} (city={city_code}, threshold={threshold}F, "
+        f"{market['market_ticker']} (city={city_code}, condition={condition['kind']}, "
         f"projected_low={'n/a' if projected_low_f is None else f'{projected_low_f:.1f}F'})."
     )
 
@@ -402,6 +431,24 @@ def _extract_temperature_threshold(market_ticker: str) -> float | None:
     return float(match.group(1))
 
 
+def _parse_low_temp_condition(title: str) -> dict[str, float | str | None] | None:
+    range_match = re.search(r"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)°", title)
+    if range_match:
+        low = float(range_match.group(1))
+        high = float(range_match.group(2))
+        return {"kind": "range", "low": low, "high": high}
+
+    lt_match = re.search(r"<\s*(\d+(?:\.\d+)?)°", title)
+    if lt_match:
+        return {"kind": "lt", "low": float(lt_match.group(1)), "high": None}
+
+    gt_match = re.search(r">\s*(\d+(?:\.\d+)?)°", title)
+    if gt_match:
+        return {"kind": "gt", "low": float(gt_match.group(1)), "high": None}
+
+    return None
+
+
 def _extract_low_temp_city_code(market_ticker: str) -> str | None:
     match = re.search(r"^KXLOWT([A-Z]+)-", market_ticker)
     if not match:
@@ -423,8 +470,49 @@ def _to_fahrenheit(value: float, unit: str) -> float:
     return value
 
 
-def _sigmoid(x: float) -> float:
-    return 1.0 / (1.0 + math.exp(-x))
+def _condition_probability(
+    condition: dict[str, float | str | None], mu_f: float, sigma_f: float
+) -> float:
+    kind = str(condition["kind"])
+    low = float(condition["low"])
+    if kind == "lt":
+        return _normal_cdf(low, mu_f, sigma_f)
+    if kind == "gt":
+        return 1.0 - _normal_cdf(low, mu_f, sigma_f)
+    if kind == "range":
+        high = float(condition["high"])
+        lo = min(low, high)
+        hi = max(low, high)
+        return _normal_cdf(hi, mu_f, sigma_f) - _normal_cdf(lo, mu_f, sigma_f)
+    return 0.5
+
+
+def _normal_cdf(x: float, mu: float, sigma: float) -> float:
+    sigma = max(1e-6, sigma)
+    z = (x - mu) / (sigma * math.sqrt(2.0))
+    return 0.5 * (1.0 + math.erf(z))
+
+
+def _resolve_sigma_f(model: dict | None, station_id: str) -> float:
+    if not model:
+        return 3.5
+    station_sigma = model.get("station_sigma_f", {})
+    if isinstance(station_sigma, dict) and station_id in station_sigma:
+        return max(1.5, float(station_sigma[station_id]))
+    return max(1.5, float(model.get("global_sigma_f", 3.5)))
+
+
+def _condition_label(condition: dict[str, float | str | None]) -> str:
+    kind = str(condition["kind"])
+    low = float(condition["low"])
+    if kind == "lt":
+        return f"< {low}F"
+    if kind == "gt":
+        return f"> {low}F"
+    if kind == "range":
+        high = float(condition["high"])
+        return f"{low}-{high}F"
+    return "unknown"
 
 
 def _clamp(value: float, low: float, high: float) -> float:
