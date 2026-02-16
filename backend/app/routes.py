@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
-from kalbot.schemas import HealthResponse, SignalCard
+from kalbot.bot_intel_repo import BotIntelRepositoryError, get_bot_leaderboard
+from kalbot.schemas import BotLeaderboardEntry, HealthResponse, SignalCard
 from kalbot.signals_repo import SignalRepositoryError, list_current_signals
 from kalbot.settings import get_settings
 
@@ -43,3 +44,19 @@ def current_signals() -> list[SignalCard]:
             data_source_url="https://www.weather.gov/",
         )
     ]
+
+
+@router.get("/v1/intel/leaderboard", response_model=list[BotLeaderboardEntry])
+def bot_leaderboard(
+    sort: str = Query(default="impressiveness", pattern="^(impressiveness|pnl|volume|roi)$"),
+    window: str = Query(default="all", pattern="^(all|1m|1w|1d)$"),
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[BotLeaderboardEntry]:
+    try:
+        rows = get_bot_leaderboard(window=window, sort=sort, limit=limit)
+        if rows:
+            return rows
+    except BotIntelRepositoryError:
+        pass
+
+    return []

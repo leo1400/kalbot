@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from kalbot.bot_intel_repo import BotIntelRepositoryError, seed_demo_bot_intel
 from kalbot.signals_repo import SignalRepositoryError, publish_demo_signal_for_date
 from kalbot.settings import get_settings
 
@@ -63,6 +64,12 @@ class DailyPipeline:
         mode = self.settings.execution_mode
         return f"Execution stub complete (current mode={mode})."
 
+    def update_bot_intel(self) -> str:
+        try:
+            return seed_demo_bot_intel(self.run_date)
+        except BotIntelRepositoryError as exc:
+            return f"Skipped bot intel update: {exc}"
+
     def publish_signal_snapshot(self) -> str:
         try:
             return publish_demo_signal_for_date(self.run_date)
@@ -77,6 +84,7 @@ class DailyPipeline:
         self._run_step("train_and_calibrate", self.train_and_calibrate)
         self._run_step("score_and_decide", self.score_and_decide)
         self._run_step("simulate_execution", self.simulate_execution)
+        self._run_step("update_bot_intel", self.update_bot_intel)
         self._run_step("publish_signal_snapshot", self.publish_signal_snapshot)
         completed_at = datetime.now(timezone.utc)
 

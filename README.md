@@ -8,6 +8,7 @@ Blueprint and reverse-engineering notes are documented in:
 
 - `docs/purplesalmon-analysis-2026-02-16.md`
 - `docs/kalbot-blueprint.md`
+- `docs/bastion-inspiration-2026-02-16.md`
 
 ## Immediate objective
 
@@ -31,6 +32,7 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
    - `docker compose -f infra/docker-compose.yml up -d`
 5. Apply migration:
    - `psql "postgresql://postgres:postgres@localhost:5432/kalbot" -f infra/migrations/001_initial_schema.sql`
+   - `psql "postgresql://postgres:postgres@localhost:5432/kalbot" -f infra/migrations/002_bot_intel.sql`
 6. Start backend:
    - `./scripts/start-backend.ps1`
 7. Run daily pipeline stub:
@@ -43,5 +45,6 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
 - Frontend dashboard: `http://localhost:5173`
 - API docs: `http://localhost:8000/docs`
 - Current signals endpoint: `http://localhost:8000/v1/signals/current`
+- Bot intel leaderboard: `http://localhost:8000/v1/intel/leaderboard?sort=impressiveness&window=all&limit=10`
 
 Daily run summaries are written to `artifacts/daily/<YYYY-MM-DD>/run-summary.json`.

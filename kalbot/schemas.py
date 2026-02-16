@@ -20,3 +20,17 @@ class SignalCard(BaseModel):
     confidence: float
     rationale: str
     data_source_url: str
+
+
+class BotLeaderboardEntry(BaseModel):
+    rank: int
+    platform: str
+    display_name: str
+    account_address: str
+    entity_type: str
+    roi_pct: float
+    pnl_usd: float
+    volume_usd: float
+    impressiveness_score: float
+    snapshot_date: str
+    source: str

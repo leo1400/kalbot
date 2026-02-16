@@ -78,6 +78,62 @@ h2 {
   color: #355168;
 }
 
+.mono {
+  font-family: "JetBrains Mono", monospace;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filters {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filters label {
+  font-size: 12px;
+  color: #355168;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filters select {
+  border: 1px solid rgba(64, 83, 102, 0.2);
+  border-radius: 8px;
+  background: #fff;
+  padding: 5px 8px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(64, 83, 102, 0.2);
+  font-size: 13px;
+}
+
+.table th {
+  color: #2d5776;
+  font-weight: 700;
+}
+
 a {
   color: #1d5fa4;
 }
