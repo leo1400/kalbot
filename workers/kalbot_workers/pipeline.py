@@ -9,6 +9,7 @@ from typing import Callable
 from kalbot.bot_intel_repo import BotIntelRepositoryError, seed_demo_bot_intel
 from kalbot.signals_repo import SignalRepositoryError, publish_demo_signal_for_date
 from kalbot.settings import get_settings
+from kalbot.weather_ingest import WeatherIngestError, ingest_weather_data
 
 
 @dataclass
@@ -47,7 +48,19 @@ class DailyPipeline:
             raise
 
     def ingest_data(self) -> str:
-        return "Ingestion stubs complete (Kalshi + weather connectors pending)."
+        try:
+            summary = ingest_weather_data(self.settings)
+        except WeatherIngestError as exc:
+            return f"Skipped weather ingestion: {exc}"
+
+        status = (
+            f"Weather ingest complete: targets={summary.targets_succeeded}/"
+            f"{summary.targets_attempted}, forecast_rows={summary.forecast_rows_written}, "
+            f"observation_rows={summary.observation_rows_written}"
+        )
+        if summary.target_failures:
+            status += f", failures={len(summary.target_failures)}"
+        return status
 
     def build_features(self) -> str:
         return "Feature builder stub complete (rolling windows pending)."

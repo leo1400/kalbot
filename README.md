@@ -61,3 +61,11 @@ If you don't have Node/npm installed, use:
 The script will run the frontend in Docker via profile `ui`.
 
 Daily run summaries are written to `artifacts/daily/<YYYY-MM-DD>/run-summary.json`.
+
+## Weather ingestion
+
+- Daily worker now ingests live NWS weather data into:
+  - `weather_forecasts`
+  - `weather_observations`
+- Configure targets with:
+  - `KALBOT_WEATHER_TARGETS=nyc:40.7128,-74.0060;chi:41.8781,-87.6298;mia:25.7617,-80.1918`
