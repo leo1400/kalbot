@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from psycopg import errors
@@ -281,6 +282,14 @@ def _load_feed_for_date(run_date: date, settings: Settings) -> BotIntelFeed | No
                 default_source=settings.bot_intel_source_name,
                 run_date=run_date,
             )
+    else:
+        provider = (settings.bot_intel_provider or "").strip().lower()
+        if provider in {"", "none"}:
+            return None
+        if provider == "polymarket":
+            payload = _load_polymarket_leaderboard_payload(run_date=run_date, settings=settings)
+        else:
+            raise BotIntelRepositoryError(f"Unsupported bot intel provider: {settings.bot_intel_provider}")
 
     if payload is None:
         return None
@@ -412,6 +421,95 @@ def _payload_from_csv(raw: str, default_source: str, run_date: date) -> dict[str
         "traders": traders,
         "activity": activity,
     }
+
+
+def _load_polymarket_leaderboard_payload(run_date: date, settings: Settings) -> dict[str, Any]:
+    api_base = settings.polymarket_api_base.rstrip("/")
+    query = urlencode(
+        {
+            "timeFrame": settings.polymarket_leaderboard_timeframe,
+            "category": settings.polymarket_leaderboard_category,
+            "limit": max(1, settings.polymarket_leaderboard_limit),
+            "offset": 0,
+            "sortBy": settings.polymarket_leaderboard_sort_by,
+        }
+    )
+    url = f"{api_base}/v1/leaderboard?{query}"
+    request = Request(
+        url=url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "Accept": "application/json,text/plain,*/*",
+            "Referer": "https://www.bastionai.app/",
+        },
+        method="GET",
+    )
+
+    try:
+        with urlopen(request, timeout=max(1, settings.bot_intel_feed_timeout_seconds)) as response:
+            raw = response.read().decode("utf-8")
+    except Exception as exc:
+        raise BotIntelRepositoryError(f"Failed to fetch Polymarket leaderboard: {exc}") from exc
+
+    try:
+        records = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise BotIntelRepositoryError("Polymarket leaderboard returned invalid JSON.") from exc
+
+    if not isinstance(records, list):
+        raise BotIntelRepositoryError("Polymarket leaderboard response was not a list.")
+
+    traders: list[dict[str, Any]] = []
+    min_volume = max(0.0, settings.polymarket_min_volume_usd)
+    seen_accounts: set[str] = set()
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+        account_address = str(item.get("proxyWallet") or "").strip().lower()
+        if not account_address or account_address in seen_accounts:
+            continue
+
+        volume_usd = _as_float(item.get("vol"), 0.0)
+        if volume_usd < min_volume:
+            continue
+
+        pnl_usd = _as_float(item.get("pnl"), 0.0)
+        roi_pct = (pnl_usd / volume_usd * 100.0) if volume_usd > 0 else 0.0
+        seen_accounts.add(account_address)
+        traders.append(
+            {
+                "platform": "POLYMARKET",
+                "account_address": account_address,
+                "display_name": _coerce_polymarket_name(item, account_address),
+                "entity_type": "wallet",
+                "roi_pct": roi_pct,
+                "pnl_usd": pnl_usd,
+                "volume_usd": volume_usd,
+                "win_rate_pct": None,
+                "impressiveness_score": roi_pct,
+                "source": "polymarket_public_leaderboard",
+            }
+        )
+
+    return {
+        "source": "polymarket_public_leaderboard",
+        "snapshot_date": run_date.isoformat(),
+        "traders": traders,
+        "activity": [],
+    }
+
+
+def _coerce_polymarket_name(item: dict[str, Any], account_address: str) -> str:
+    user_name = str(item.get("userName") or "").strip()
+    if user_name:
+        return user_name
+    x_name = str(item.get("xUsername") or "").strip()
+    if x_name:
+        return x_name
+    if len(account_address) >= 10:
+        return f"{account_address[:6]}...{account_address[-4:]}"
+    return account_address or "unknown"
 
 
 def _parse_traders(raw: Any, source: str) -> list[TraderSnapshotInput]:

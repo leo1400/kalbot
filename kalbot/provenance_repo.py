@@ -43,8 +43,20 @@ def _load_sources(cur) -> list[SourceProvenanceRow]:
         SELECT
           (SELECT MAX(created_at) FROM weather_forecasts) AS weather_last,
           (SELECT MAX(captured_at) FROM market_snapshots) AS kalshi_last,
-          (SELECT MAX(event_time) FROM copy_activity_events) AS bot_last,
-          (SELECT COUNT(*) FROM copy_activity_events) AS bot_total_count,
+          (SELECT MAX(created_at) FROM trader_performance_snapshots) AS bot_snapshot_last,
+          (SELECT COUNT(*) FROM trader_performance_snapshots) AS bot_snapshot_total_count,
+          (
+            SELECT COUNT(*)
+            FROM trader_performance_snapshots
+            WHERE source ILIKE '%demo%'
+               OR source ILIKE '%seed%'
+               OR source ILIKE '%sample%'
+               OR source ILIKE '%example%'
+               OR source ILIKE '%synthetic%'
+               OR source ILIKE '%test%'
+          ) AS bot_snapshot_synthetic_count,
+          (SELECT MAX(event_time) FROM copy_activity_events) AS bot_event_last,
+          (SELECT COUNT(*) FROM copy_activity_events) AS bot_event_total_count,
           (
             SELECT COUNT(*)
             FROM copy_activity_events
@@ -54,17 +66,22 @@ def _load_sources(cur) -> list[SourceProvenanceRow]:
                OR source ILIKE '%example%'
                OR source ILIKE '%synthetic%'
                OR source ILIKE '%test%'
-          ) AS bot_synthetic_count
+          ) AS bot_event_synthetic_count
         """
     )
     row = cur.fetchone()
 
     weather_age = _age_minutes(row["weather_last"])
     kalshi_age = _age_minutes(row["kalshi_last"])
-    bot_age = _age_minutes(row["bot_last"])
+    bot_snapshot_last = row["bot_snapshot_last"]
+    bot_event_last = row["bot_event_last"]
+    bot_last = _latest_timestamp(bot_snapshot_last, bot_event_last)
+    bot_age = _age_minutes(bot_last)
 
-    bot_total = int(row["bot_total_count"] or 0)
-    bot_synthetic = int(row["bot_synthetic_count"] or 0)
+    bot_total = int(row["bot_snapshot_total_count"] or 0) + int(row["bot_event_total_count"] or 0)
+    bot_synthetic = int(row["bot_snapshot_synthetic_count"] or 0) + int(
+        row["bot_event_synthetic_count"] or 0
+    )
     if bot_total == 0:
         bot_mode = "unavailable"
         bot_note = "no bot intel feed rows ingested yet"
@@ -73,7 +90,10 @@ def _load_sources(cur) -> list[SourceProvenanceRow]:
         bot_note = "all bot intel rows are synthetic/sample"
     else:
         bot_mode = "real"
-        bot_note = "non-synthetic bot intel activity observed"
+        if int(row["bot_event_total_count"] or 0) == 0:
+            bot_note = "non-synthetic leaderboard snapshots observed"
+        else:
+            bot_note = "non-synthetic bot intel activity observed"
 
     return [
         SourceProvenanceRow(
@@ -94,7 +114,7 @@ def _load_sources(cur) -> list[SourceProvenanceRow]:
             source_key="bot_intel_feed",
             mode=bot_mode,
             status=_fresh_status(bot_age, good_max=60.0, degraded_max=360.0),
-            last_event_utc=row["bot_last"],
+            last_event_utc=bot_last,
             note=bot_note,
         ),
     ]
@@ -186,6 +206,14 @@ def _fresh_status(age_min: float | None, good_max: float, degraded_max: float) -
     if age_min <= degraded_max:
         return "degraded"
     return "stale"
+
+
+def _latest_timestamp(first: datetime | None, second: datetime | None) -> datetime | None:
+    if first is None:
+        return second
+    if second is None:
+        return first
+    return first if first >= second else second
 
 
 def _city_coverage_status(snapshot_age: float | None, forecast_age: float | None) -> str:

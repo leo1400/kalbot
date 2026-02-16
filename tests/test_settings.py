@@ -30,3 +30,5 @@ def test_default_bot_intel_is_real_first() -> None:
     assert settings.bot_intel_feed_path is None
     assert settings.bot_intel_feed_url is None
     assert settings.bot_intel_feed_format == "auto"
+    assert settings.bot_intel_provider == "polymarket"
+    assert settings.polymarket_api_base == "https://data-api.polymarket.com"

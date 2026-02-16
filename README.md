@@ -109,13 +109,21 @@ Daily run summaries are written to `artifacts/daily/<YYYY-MM-DD>/run-summary.jso
 
 ## Bot intel ingestion (real-first)
 
-- Daily worker now ingests bot intel only from configured feed sources:
-  - `KALBOT_BOT_INTEL_FEED_PATH` (local JSON/CSV file), or
-  - `KALBOT_BOT_INTEL_FEED_URL` (JSON/CSV endpoint).
+- Daily worker ingests bot intel from this priority order:
+  - `KALBOT_BOT_INTEL_FEED_PATH` (local JSON/CSV file),
+  - `KALBOT_BOT_INTEL_FEED_URL` (JSON/CSV endpoint),
+  - or built-in provider (`KALBOT_BOT_INTEL_PROVIDER=polymarket`) using the public Polymarket leaderboard API.
 - Feed parser options:
   - `KALBOT_BOT_INTEL_FEED_FORMAT=auto|json|csv`
   - `KALBOT_BOT_INTEL_FEED_HEADERS_JSON` for auth headers (JSON object)
   - `KALBOT_BOT_INTEL_FEED_TIMEOUT_SECONDS`
+- Polymarket options:
+  - `KALBOT_POLYMARKET_API_BASE`
+  - `KALBOT_POLYMARKET_LEADERBOARD_TIMEFRAME` (example: `all`, `month`)
+  - `KALBOT_POLYMARKET_LEADERBOARD_CATEGORY` (default: `weather`)
+  - `KALBOT_POLYMARKET_LEADERBOARD_LIMIT`
+  - `KALBOT_POLYMARKET_LEADERBOARD_SORT_BY` (default: `PNL`)
+  - `KALBOT_POLYMARKET_MIN_VOLUME_USD` (volume floor before a trader is included)
 - Example local feed file:
   - `docs/bot-intel-feed.sample.json`
 - Example env for local testing:

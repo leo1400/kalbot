@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     bot_intel_feed_headers_json: str | None = Field(default=None)
     bot_intel_feed_timeout_seconds: int = Field(default=20)
     bot_intel_source_name: str = Field(default="external_feed")
+    bot_intel_provider: str = Field(default="polymarket")
+    polymarket_api_base: str = Field(default="https://data-api.polymarket.com")
+    polymarket_leaderboard_timeframe: str = Field(default="all")
+    polymarket_leaderboard_category: str = Field(default="weather")
+    polymarket_leaderboard_limit: int = Field(default=50)
+    polymarket_leaderboard_sort_by: str = Field(default="PNL")
+    polymarket_min_volume_usd: float = Field(default=250.0)
 
     model_config = SettingsConfigDict(
         env_file=".env",
