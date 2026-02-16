@@ -110,10 +110,12 @@ Daily run summaries are written to `artifacts/daily/<YYYY-MM-DD>/run-summary.jso
 ## Bot intel ingestion (real-first)
 
 - Daily worker now ingests bot intel only from configured feed sources:
-  - `KALBOT_BOT_INTEL_FEED_PATH` (local JSON file), or
-  - `KALBOT_BOT_INTEL_FEED_URL` (JSON endpoint).
-- By default, demo seeding is disabled:
-  - `KALBOT_BOT_INTEL_ALLOW_DEMO_SEED=false`
+  - `KALBOT_BOT_INTEL_FEED_PATH` (local JSON/CSV file), or
+  - `KALBOT_BOT_INTEL_FEED_URL` (JSON/CSV endpoint).
+- Feed parser options:
+  - `KALBOT_BOT_INTEL_FEED_FORMAT=auto|json|csv`
+  - `KALBOT_BOT_INTEL_FEED_HEADERS_JSON` for auth headers (JSON object)
+  - `KALBOT_BOT_INTEL_FEED_TIMEOUT_SECONDS`
 - Example local feed file:
   - `docs/bot-intel-feed.sample.json`
 - Example env for local testing:

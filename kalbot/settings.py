@@ -48,8 +48,10 @@ class Settings(BaseSettings):
     bot_intel_ingest_enabled: bool = Field(default=True)
     bot_intel_feed_path: str | None = Field(default=None)
     bot_intel_feed_url: str | None = Field(default=None)
+    bot_intel_feed_format: str = Field(default="auto")
+    bot_intel_feed_headers_json: str | None = Field(default=None)
+    bot_intel_feed_timeout_seconds: int = Field(default=20)
     bot_intel_source_name: str = Field(default="external_feed")
-    bot_intel_allow_demo_seed: bool = Field(default=False)
 
     model_config = SettingsConfigDict(
         env_file=".env",

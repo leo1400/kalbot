@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import csv
 import json
+from io import StringIO
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -59,7 +61,7 @@ def refresh_bot_intel(run_date: date, settings: Settings | None = None) -> str:
 
     try:
         with get_connection() as conn, conn.cursor() as cur:
-            purged = _purge_synthetic_rows(cur) if not cfg.bot_intel_allow_demo_seed else 0
+            purged = _purge_synthetic_rows(cur)
 
             feed = _load_feed_for_date(run_date=run_date, settings=cfg)
             if feed is None:
@@ -196,6 +198,10 @@ def _purge_synthetic_rows(cur) -> int:
         DELETE FROM copy_activity_events
         WHERE source ILIKE '%demo%'
            OR source ILIKE '%seed%'
+           OR source ILIKE '%sample%'
+           OR source ILIKE '%example%'
+           OR source ILIKE '%synthetic%'
+           OR source ILIKE '%test%'
         """
     )
     total += int(cur.rowcount or 0)
@@ -205,6 +211,10 @@ def _purge_synthetic_rows(cur) -> int:
         DELETE FROM trader_performance_snapshots
         WHERE source ILIKE '%demo%'
            OR source ILIKE '%seed%'
+           OR source ILIKE '%sample%'
+           OR source ILIKE '%example%'
+           OR source ILIKE '%synthetic%'
+           OR source ILIKE '%test%'
         """
     )
     total += int(cur.rowcount or 0)
@@ -212,7 +222,14 @@ def _purge_synthetic_rows(cur) -> int:
     cur.execute(
         """
         DELETE FROM tracked_traders t
-        WHERE (t.source ILIKE '%demo%' OR t.source ILIKE '%seed%')
+        WHERE (
+          t.source ILIKE '%demo%'
+          OR t.source ILIKE '%seed%'
+          OR t.source ILIKE '%sample%'
+          OR t.source ILIKE '%example%'
+          OR t.source ILIKE '%synthetic%'
+          OR t.source ILIKE '%test%'
+        )
           AND NOT EXISTS (
             SELECT 1 FROM trader_performance_snapshots s WHERE s.trader_id = t.id
           )
@@ -227,22 +244,43 @@ def _purge_synthetic_rows(cur) -> int:
 
 def _load_feed_for_date(run_date: date, settings: Settings) -> BotIntelFeed | None:
     payload: dict[str, Any] | None = None
+    feed_format = (settings.bot_intel_feed_format or "auto").strip().lower()
 
     if settings.bot_intel_feed_path:
         path = Path(settings.bot_intel_feed_path)
         if not path.exists():
             raise BotIntelRepositoryError(f"Bot intel feed file not found: {path}")
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_text(encoding="utf-8")
+        inferred = feed_format if feed_format != "auto" else _infer_feed_format(path.suffix, "")
+        payload = _parse_raw_feed_payload(
+            raw=raw,
+            feed_format=inferred,
+            default_source=settings.bot_intel_source_name,
+            run_date=run_date,
+        )
     elif settings.bot_intel_feed_url:
+        headers = _parse_headers(settings.bot_intel_feed_headers_json)
+        headers.setdefault("User-Agent", "kalbot-bot-intel/1.0")
+        headers.setdefault("Accept", "application/json,text/csv;q=0.9,*/*;q=0.8")
         req = Request(
             url=settings.bot_intel_feed_url,
-            headers={"User-Agent": "kalbot-bot-intel/1.0", "Accept": "application/json"},
+            headers=headers,
             method="GET",
         )
-        with urlopen(req, timeout=20) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    elif settings.bot_intel_allow_demo_seed:
-        payload = _build_demo_seed_payload(run_date)
+        with urlopen(req, timeout=max(1, settings.bot_intel_feed_timeout_seconds)) as response:
+            raw = response.read().decode("utf-8")
+            content_type = str(response.headers.get("Content-Type", ""))
+            inferred = (
+                feed_format
+                if feed_format != "auto"
+                else _infer_feed_format(settings.bot_intel_feed_url, content_type)
+            )
+            payload = _parse_raw_feed_payload(
+                raw=raw,
+                feed_format=inferred,
+                default_source=settings.bot_intel_source_name,
+                run_date=run_date,
+            )
 
     if payload is None:
         return None
@@ -268,6 +306,112 @@ def _parse_feed_payload(payload: dict[str, Any], default_source: str, run_date: 
     traders = _parse_traders(payload.get("traders"), source)
     activity = _parse_activity(payload.get("activity"), source, run_date)
     return BotIntelFeed(snapshot_date=snapshot_date, source=source, traders=traders, activity=activity)
+
+
+def _parse_raw_feed_payload(
+    raw: str,
+    feed_format: str,
+    default_source: str,
+    run_date: date,
+) -> dict[str, Any]:
+    fmt = feed_format.strip().lower()
+    if fmt == "json":
+        return json.loads(raw)
+    if fmt == "csv":
+        return _payload_from_csv(raw=raw, default_source=default_source, run_date=run_date)
+    raise BotIntelRepositoryError(f"Unsupported bot intel feed format: {feed_format}")
+
+
+def _infer_feed_format(source_hint: str, content_type: str) -> str:
+    lower_hint = source_hint.lower()
+    lower_ct = content_type.lower()
+    if ".csv" in lower_hint or "text/csv" in lower_ct:
+        return "csv"
+    return "json"
+
+
+def _parse_headers(raw_json: str | None) -> dict[str, str]:
+    if not raw_json:
+        return {}
+    try:
+        payload = json.loads(raw_json)
+    except json.JSONDecodeError as exc:
+        raise BotIntelRepositoryError(
+            "KALBOT_BOT_INTEL_FEED_HEADERS_JSON is not valid JSON."
+        ) from exc
+    if not isinstance(payload, dict):
+        raise BotIntelRepositoryError("KALBOT_BOT_INTEL_FEED_HEADERS_JSON must be a JSON object.")
+    headers: dict[str, str] = {}
+    for key, value in payload.items():
+        text_key = str(key).strip()
+        if not text_key:
+            continue
+        headers[text_key] = str(value)
+    return headers
+
+
+def _payload_from_csv(raw: str, default_source: str, run_date: date) -> dict[str, Any]:
+    rows = list(csv.DictReader(StringIO(raw)))
+    traders: list[dict[str, Any]] = []
+    activity: list[dict[str, Any]] = []
+    snapshot_date = run_date.isoformat()
+    source_name = default_source
+
+    for row in rows:
+        normalized = {str(k or "").strip().lower(): (v or "").strip() for k, v in row.items()}
+        if not any(normalized.values()):
+            continue
+        row_type = (normalized.get("record_type") or "").lower()
+        row_source = normalized.get("source")
+        if row_source:
+            source_name = row_source
+        row_snapshot = normalized.get("snapshot_date")
+        if row_snapshot:
+            snapshot_date = row_snapshot
+
+        if row_type == "activity" or (
+            normalized.get("leader_account_address")
+            and normalized.get("follower_alias")
+            and normalized.get("market_ticker")
+        ):
+            activity.append(
+                {
+                    "event_time": normalized.get("event_time"),
+                    "follower_alias": normalized.get("follower_alias"),
+                    "leader_account_address": normalized.get("leader_account_address"),
+                    "market_ticker": normalized.get("market_ticker"),
+                    "side": normalized.get("side"),
+                    "contracts": normalized.get("contracts"),
+                    "pnl_usd": normalized.get("pnl_usd"),
+                    "source": row_source or source_name,
+                }
+            )
+            continue
+
+        if normalized.get("account_address") and normalized.get("display_name"):
+            traders.append(
+                {
+                    "platform": normalized.get("platform") or "KALSHI",
+                    "account_address": normalized.get("account_address"),
+                    "display_name": normalized.get("display_name"),
+                    "entity_type": normalized.get("entity_type") or "bot",
+                    "roi_pct": normalized.get("roi_pct") or "0",
+                    "pnl_usd": normalized.get("pnl_usd") or "0",
+                    "volume_usd": normalized.get("volume_usd") or "0",
+                    "win_rate_pct": normalized.get("win_rate_pct") or None,
+                    "impressiveness_score": normalized.get("impressiveness_score")
+                    or normalized.get("roi_pct")
+                    or "0",
+                    "source": row_source or source_name,
+                }
+            )
+
+    return {
+        "source": source_name,
+        "snapshot_date": snapshot_date,
+        "traders": traders,
+        "activity": activity,
+    }
 
 
 def _parse_traders(raw: Any, source: str) -> list[TraderSnapshotInput]:
@@ -368,37 +512,6 @@ def _as_int(raw: Any, default: int) -> int:
         return int(raw)
     except (TypeError, ValueError):
         return default
-
-
-def _build_demo_seed_payload(run_date: date) -> dict[str, Any]:
-    return {
-        "source": "kalbot_demo_seed",
-        "snapshot_date": run_date.isoformat(),
-        "traders": [
-            {
-                "platform": "KALSHI",
-                "account_address": "0x4a1f...91bd",
-                "display_name": "TempEdge_Atlas",
-                "entity_type": "bot",
-                "roi_pct": 42.7,
-                "pnl_usd": 12840.21,
-                "volume_usd": 30092.33,
-                "win_rate_pct": 63.5,
-                "impressiveness_score": 42.7,
-            }
-        ],
-        "activity": [
-            {
-                "event_time": f"{run_date.isoformat()}T12:00:00Z",
-                "follower_alias": "RainRunner",
-                "leader_account_address": "0x4a1f...91bd",
-                "market_ticker": f"WEATHER-NYC-{run_date.isoformat()}-HIGH-GT-45F",
-                "side": "yes",
-                "contracts": 8,
-                "pnl_usd": 23.5,
-            }
-        ],
-    }
 
 
 def get_bot_leaderboard(

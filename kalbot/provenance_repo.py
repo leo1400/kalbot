@@ -50,6 +50,10 @@ def _load_sources(cur) -> list[SourceProvenanceRow]:
             FROM copy_activity_events
             WHERE source ILIKE '%demo%'
                OR source ILIKE '%seed%'
+               OR source ILIKE '%sample%'
+               OR source ILIKE '%example%'
+               OR source ILIKE '%synthetic%'
+               OR source ILIKE '%test%'
           ) AS bot_synthetic_count
         """
     )
@@ -65,11 +69,11 @@ def _load_sources(cur) -> list[SourceProvenanceRow]:
         bot_mode = "unavailable"
         bot_note = "no bot intel feed rows ingested yet"
     elif bot_synthetic == bot_total:
-        bot_mode = "demo"
-        bot_note = "all bot intel rows are synthetic/demo"
+        bot_mode = "synthetic"
+        bot_note = "all bot intel rows are synthetic/sample"
     else:
         bot_mode = "real"
-        bot_note = "non-demo bot intel activity observed"
+        bot_note = "non-synthetic bot intel activity observed"
 
     return [
         SourceProvenanceRow(

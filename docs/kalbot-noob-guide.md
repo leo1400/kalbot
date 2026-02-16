@@ -19,7 +19,7 @@ This page explains Kalbot in plain English.
 - Bot intel:
   - Real only when `KALBOT_BOT_INTEL_FEED_PATH` or `KALBOT_BOT_INTEL_FEED_URL` is configured.
   - If no feed is configured, bot intel panels stay empty.
-  - Demo seeding is opt-in only (`KALBOT_BOT_INTEL_ALLOW_DEMO_SEED=true`).
+  - Synthetic/sample sources are auto-purged before ingest.
 
 ## Fast way to follow (paper mode)
 

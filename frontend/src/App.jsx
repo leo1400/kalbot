@@ -75,7 +75,7 @@ function modeClass(mode) {
   if (mode === "real") {
     return "status-good";
   }
-  if (mode === "demo") {
+  if (mode === "demo" || mode === "synthetic") {
     return "status-degraded";
   }
   return "status-stale";
