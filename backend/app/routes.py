@@ -7,6 +7,11 @@ from kalbot.bot_intel_repo import (
     get_bot_leaderboard,
     list_recent_copy_activity,
 )
+from kalbot.data_quality_repo import (
+    DataQualityRepositoryError,
+    empty_data_quality_snapshot,
+    get_data_quality_snapshot,
+)
 from kalbot.performance_repo import (
     PerformanceRepositoryError,
     empty_performance_summary,
@@ -16,6 +21,7 @@ from kalbot.performance_repo import (
 from kalbot.schemas import (
     BotLeaderboardEntry,
     CopyActivityEvent,
+    DataQualitySnapshot,
     DashboardSummary,
     HealthResponse,
     PerformanceHistoryPoint,
@@ -122,3 +128,18 @@ def performance_history(days: int = Query(default=14, ge=3, le=90)) -> list[Perf
         return get_performance_history(days=days, execution_mode=settings.execution_mode)
     except PerformanceRepositoryError:
         return []
+
+
+@router.get("/v1/data/quality", response_model=DataQualitySnapshot)
+def data_quality_snapshot() -> DataQualitySnapshot:
+    settings = get_settings()
+    target_stations = _count_weather_targets(settings.weather_targets)
+    try:
+        return get_data_quality_snapshot(target_stations=target_stations)
+    except DataQualityRepositoryError:
+        return empty_data_quality_snapshot(target_stations=target_stations)
+
+
+def _count_weather_targets(weather_targets: str) -> int:
+    parts = [chunk.strip() for chunk in weather_targets.split(";") if chunk.strip()]
+    return len(parts) if parts else 1

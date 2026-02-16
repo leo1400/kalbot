@@ -127,23 +127,45 @@ def seed_demo_bot_intel(run_date: date) -> str:
             )
             leader_id = cur.fetchone()["id"]
 
-            cur.execute(
-                """
-                INSERT INTO copy_activity_events (
-                  event_time, follower_alias, leader_trader_id, market_ticker, side, contracts, pnl_usd, source
+            events = [
+                ("RainRunner", f"WEATHER-NYC-{run_date.isoformat()}-HIGH-GT-45F", "yes", 8, 23.50),
+                ("CloudCutter", f"WEATHER-CHI-{run_date.isoformat()}-LOW-LT-28F", "no", 6, 17.10),
+                ("JetstreamJay", f"WEATHER-MIA-{run_date.isoformat()}-RAIN-GT-0.25", "yes", 5, -6.20),
+            ]
+            for follower_alias, market_ticker, side, contracts, pnl_usd in events:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM copy_activity_events
+                    WHERE source = 'kalbot_demo_seed'
+                      AND event_time::date = %s
+                      AND follower_alias = %s
+                      AND market_ticker = %s
+                      AND side = %s
+                    LIMIT 1
+                    """,
+                    (run_date, follower_alias, market_ticker, side),
                 )
-                VALUES (NOW(), %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    "RainRunner",
-                    leader_id,
-                    f"WEATHER-NYC-{run_date.isoformat()}-HIGH-GT-45F",
-                    "yes",
-                    8,
-                    23.50,
-                    "kalbot_demo_seed",
-                ),
-            )
+                if cur.fetchone() is not None:
+                    continue
+
+                cur.execute(
+                    """
+                    INSERT INTO copy_activity_events (
+                      event_time, follower_alias, leader_trader_id, market_ticker, side, contracts, pnl_usd, source
+                    )
+                    VALUES (NOW(), %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        follower_alias,
+                        leader_id,
+                        market_ticker,
+                        side,
+                        contracts,
+                        pnl_usd,
+                        "kalbot_demo_seed",
+                    ),
+                )
     except errors.UndefinedTable as exc:
         raise BotIntelRepositoryError(
             "Bot intel schema missing. Apply infra/migrations/002_bot_intel.sql."
@@ -222,17 +244,40 @@ def get_bot_leaderboard(
 
 def list_recent_copy_activity(limit: int = 20) -> list[CopyActivityEvent]:
     query = """
+        WITH ranked AS (
+          SELECT
+            c.event_time,
+            c.follower_alias,
+            c.leader_trader_id,
+            c.market_ticker,
+            c.side,
+            c.contracts,
+            c.pnl_usd,
+            ROW_NUMBER() OVER (
+              PARTITION BY
+                c.follower_alias,
+                c.leader_trader_id,
+                c.market_ticker,
+                c.side,
+                c.contracts,
+                c.pnl_usd,
+                c.event_time::date
+              ORDER BY c.event_time DESC
+            ) AS rn
+          FROM copy_activity_events c
+        )
         SELECT
-          c.event_time,
-          c.follower_alias,
+          r.event_time,
+          r.follower_alias,
           t.display_name AS leader_display_name,
-          c.market_ticker,
-          c.side,
-          c.contracts,
-          c.pnl_usd
-        FROM copy_activity_events c
-        JOIN tracked_traders t ON t.id = c.leader_trader_id
-        ORDER BY c.event_time DESC
+          r.market_ticker,
+          r.side,
+          r.contracts,
+          r.pnl_usd
+        FROM ranked r
+        JOIN tracked_traders t ON t.id = r.leader_trader_id
+        WHERE r.rn = 1
+        ORDER BY r.event_time DESC
         LIMIT %s
     """
 

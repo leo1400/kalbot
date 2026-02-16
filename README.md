@@ -55,6 +55,7 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
 - Copy activity endpoint: `http://localhost:8000/v1/intel/activity?limit=12`
 - Performance summary endpoint: `http://localhost:8000/v1/performance/summary`
 - Performance history endpoint: `http://localhost:8000/v1/performance/history?days=14`
+- Data quality endpoint: `http://localhost:8000/v1/data/quality`
 
 ## No npm on Windows
 

@@ -150,6 +150,21 @@ h2 {
   grid-column: span 2;
 }
 
+.chip.good {
+  border-color: rgba(16, 156, 114, 0.4);
+  background: rgba(16, 156, 114, 0.09);
+}
+
+.chip.degraded {
+  border-color: rgba(202, 112, 56, 0.42);
+  background: rgba(202, 112, 56, 0.1);
+}
+
+.chip.stale {
+  border-color: rgba(178, 79, 79, 0.4);
+  background: rgba(178, 79, 79, 0.1);
+}
+
 .label {
   margin: 0;
   font-size: 11px;
@@ -202,6 +217,13 @@ h2 {
   display: grid;
   gap: 9px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.quality-grid {
+  margin-top: 12px;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .metric-card {
@@ -283,7 +305,7 @@ h2 {
 
 .title {
   margin: 0;
-  font-size: 23px;
+  font-size: 20px;
   line-height: 1.28;
   font-weight: 800;
 }
@@ -355,6 +377,7 @@ h2 {
   display: grid;
   gap: 10px;
   grid-template-columns: 2fr 1fr;
+  align-items: start;
 }
 
 .filters {
@@ -413,6 +436,9 @@ h2 {
   margin-top: 10px;
   display: grid;
   gap: 8px;
+  max-height: 720px;
+  overflow-y: auto;
+  padding-right: 3px;
 }
 
 .activity-item {
@@ -462,6 +488,10 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .quality-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .intel-layout {
     grid-template-columns: 1fr;
   }
@@ -494,6 +524,10 @@ a {
   }
 
   .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quality-grid {
     grid-template-columns: 1fr;
   }
 }

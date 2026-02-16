@@ -68,3 +68,17 @@ class PerformanceHistoryPoint(BaseModel):
     day: str
     orders: int
     notional_usd: float
+
+
+class DataQualitySnapshot(BaseModel):
+    target_stations: int
+    stations_with_forecast_6h: int
+    forecast_rows_24h: int
+    observation_rows_24h: int
+    market_rows_24h: int
+    snapshot_rows_24h: int
+    latest_forecast_age_min: float | None
+    latest_observation_age_min: float | None
+    latest_snapshot_age_min: float | None
+    quality_score: float
+    status: str

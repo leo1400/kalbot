@@ -22,6 +22,14 @@ function toLocalTime(value) {
   return Number.isNaN(ts.getTime()) ? "n/a" : ts.toLocaleString();
 }
 
+function toAge(value) {
+  if (value === null || value === undefined) {
+    return "n/a";
+  }
+  const rounded = Math.round(value);
+  return `${rounded}m`;
+}
+
 function edgeTone(edge) {
   if (edge >= EDGE_APPROVE_THRESHOLD) {
     return { label: "Lean YES", cls: "pos" };
@@ -46,6 +54,7 @@ export function App() {
   const [signals, setSignals] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
   const [activity, setActivity] = useState([]);
+  const [quality, setQuality] = useState(null);
   const [performance, setPerformance] = useState(null);
   const [history, setHistory] = useState([]);
   const [sort, setSort] = useState("impressiveness");
@@ -62,7 +71,8 @@ export function App() {
         fetchJson(
           `${API_BASE}/v1/intel/leaderboard?sort=${encodeURIComponent(sort)}&window=${encodeURIComponent(window)}&limit=10`
         ),
-        fetchJson(`${API_BASE}/v1/intel/activity?limit=12`),
+        fetchJson(`${API_BASE}/v1/intel/activity?limit=8`),
+        fetchJson(`${API_BASE}/v1/data/quality`),
         fetchJson(`${API_BASE}/v1/performance/summary`),
         fetchJson(`${API_BASE}/v1/performance/history?days=14`),
       ]);
@@ -83,10 +93,13 @@ export function App() {
         setActivity(requests[4].value);
       }
       if (requests[5].status === "fulfilled") {
-        setPerformance(requests[5].value);
+        setQuality(requests[5].value);
       }
       if (requests[6].status === "fulfilled") {
-        setHistory(requests[6].value);
+        setPerformance(requests[6].value);
+      }
+      if (requests[7].status === "fulfilled") {
+        setHistory(requests[7].value);
       }
 
       const hasFailure = requests.some((item) => item.status === "rejected");
@@ -99,6 +112,16 @@ export function App() {
   }, [sort, window]);
 
   const topTrader = useMemo(() => leaderboard[0] ?? null, [leaderboard]);
+  const qualityTone = useMemo(() => {
+    const status = quality?.status ?? "stale";
+    if (status === "good") {
+      return "good";
+    }
+    if (status === "degraded") {
+      return "degraded";
+    }
+    return "stale";
+  }, [quality]);
   const historyScale = useMemo(() => {
     const max = Math.max(...history.map((row) => row.notional_usd), 1);
     return max;
@@ -139,6 +162,11 @@ export function App() {
           <article className="chip">
             <p className="label">Notional 24h</p>
             <p className="value">{toUsd(performance?.notional_24h_usd ?? 0)}</p>
+          </article>
+          <article className={`chip ${qualityTone}`}>
+            <p className="label">Data Status</p>
+            <p className="value small-value">{(quality?.status ?? "stale").toUpperCase()}</p>
+            <p className="small">Quality {((quality?.quality_score ?? 0) * 100).toFixed(0)}%</p>
           </article>
           <article className="chip wide">
             <p className="label">Top Bot Intel</p>
@@ -190,6 +218,38 @@ export function App() {
               );
             })}
           </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <h2>Data Reliability</h2>
+          <p className="small">Forecast + market freshness gates signal trust.</p>
+        </div>
+        <div className="quality-grid">
+          <article className="metric-card">
+            <p className="label">Stations Covered (6h)</p>
+            <p className="metric-main">
+              {quality?.stations_with_forecast_6h ?? 0}/{quality?.target_stations ?? 0}
+            </p>
+          </article>
+          <article className="metric-card">
+            <p className="label">Latest Forecast Age</p>
+            <p className="metric-main">{toAge(quality?.latest_forecast_age_min)}</p>
+            <p className="small">Observation age: {toAge(quality?.latest_observation_age_min)}</p>
+          </article>
+          <article className="metric-card">
+            <p className="label">Latest Snapshot Age</p>
+            <p className="metric-main">{toAge(quality?.latest_snapshot_age_min)}</p>
+            <p className="small">Kalshi snapshot recency</p>
+          </article>
+          <article className="metric-card">
+            <p className="label">Rows (24h)</p>
+            <p className="metric-main">
+              {quality?.forecast_rows_24h ?? 0}/{quality?.snapshot_rows_24h ?? 0}
+            </p>
+            <p className="small">forecast/snapshot writes</p>
+          </article>
         </div>
       </section>
 
