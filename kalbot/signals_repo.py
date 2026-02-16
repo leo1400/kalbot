@@ -86,6 +86,8 @@ def list_current_signals(limit: int = 20) -> list[SignalCard]:
         SignalCard(
             market_ticker=row["market_ticker"],
             title=row["title"],
+            city_code=_extract_low_temp_city_code(row["market_ticker"]),
+            city_name=_city_name_from_code(_extract_low_temp_city_code(row["market_ticker"])),
             probability_yes=float(row["probability_yes"]),
             market_implied_yes=float(row["market_implied_yes"]),
             edge=float(row["edge"]),
@@ -127,6 +129,8 @@ def list_signal_playbook(limit: int = 6) -> list[PlaybookSignal]:
             PlaybookSignal(
                 market_ticker=signal.market_ticker,
                 title=signal.title,
+                city_code=signal.city_code,
+                city_name=signal.city_name,
                 action=action,
                 edge=signal.edge,
                 confidence=signal.confidence,
@@ -634,6 +638,21 @@ def _extract_low_temp_city_code(market_ticker: str) -> str | None:
     if not match:
         return None
     return match.group(1)
+
+
+def _city_name_from_code(city_code: str | None) -> str | None:
+    if not city_code:
+        return None
+    names = {
+        "LAX": "Los Angeles",
+        "NYC": "New York City",
+        "PHIL": "Philadelphia",
+        "CHI": "Chicago",
+        "MIA": "Miami",
+        "SF": "San Francisco",
+    }
+    upper = city_code.upper()
+    return names.get(upper, upper)
 
 
 def _station_candidates(city_code: str) -> list[str]:

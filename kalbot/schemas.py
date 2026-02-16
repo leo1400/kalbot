@@ -14,6 +14,8 @@ class HealthResponse(BaseModel):
 class SignalCard(BaseModel):
     market_ticker: str
     title: str
+    city_code: str | None = None
+    city_name: str | None = None
     probability_yes: float
     market_implied_yes: float
     edge: float
@@ -49,6 +51,7 @@ class CopyActivityEvent(BaseModel):
     follower_alias: str
     leader_display_name: str
     market_ticker: str
+    source: str
     side: str
     contracts: int
     pnl_usd: float
@@ -87,6 +90,8 @@ class DataQualitySnapshot(BaseModel):
 class PlaybookSignal(BaseModel):
     market_ticker: str
     title: str
+    city_code: str | None = None
+    city_name: str | None = None
     action: str
     edge: float
     confidence: float
@@ -96,3 +101,13 @@ class PlaybookSignal(BaseModel):
     suggested_notional_usd: float
     entry_price: float
     note: str
+
+
+class PaperOrderRow(BaseModel):
+    created_at: datetime
+    market_ticker: str
+    side: str
+    contracts: int
+    limit_price: float
+    status: str
+    edge: float

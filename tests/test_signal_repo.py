@@ -1,4 +1,5 @@
 from kalbot.signals_repo import (
+    _city_name_from_code,
     _derive_playbook_action,
     _condition_probability,
     _extract_low_temp_city_code,
@@ -20,6 +21,11 @@ def test_extract_temperature_threshold_returns_none_for_nonmatch() -> None:
 
 def test_extract_low_temp_city_code() -> None:
     assert _extract_low_temp_city_code("KXLOWTLAX-26FEB17-T51") == "LAX"
+
+
+def test_city_name_from_code() -> None:
+    assert _city_name_from_code("LAX") == "Los Angeles"
+    assert _city_name_from_code("ABC") == "ABC"
 
 
 def test_parse_low_temp_condition_range() -> None:

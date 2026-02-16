@@ -271,10 +271,19 @@ def list_recent_copy_activity(limit: int = 20) -> list[CopyActivityEvent]:
           r.follower_alias,
           t.display_name AS leader_display_name,
           r.market_ticker,
+          c.source,
           r.side,
           r.contracts,
           r.pnl_usd
         FROM ranked r
+        JOIN copy_activity_events c
+          ON c.event_time = r.event_time
+         AND c.follower_alias = r.follower_alias
+         AND c.leader_trader_id = r.leader_trader_id
+         AND c.market_ticker = r.market_ticker
+         AND c.side = r.side
+         AND c.contracts = r.contracts
+         AND c.pnl_usd = r.pnl_usd
         JOIN tracked_traders t ON t.id = r.leader_trader_id
         WHERE r.rn = 1
         ORDER BY r.event_time DESC
@@ -296,6 +305,7 @@ def list_recent_copy_activity(limit: int = 20) -> list[CopyActivityEvent]:
                 follower_alias=row["follower_alias"],
                 leader_display_name=row["leader_display_name"],
                 market_ticker=row["market_ticker"],
+                source=row["source"],
                 side=row["side"],
                 contracts=int(row["contracts"]),
                 pnl_usd=float(row["pnl_usd"]),

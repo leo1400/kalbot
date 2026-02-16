@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from kalbot.db import get_connection
-from kalbot.schemas import PerformanceHistoryPoint, PerformanceSummary
+from kalbot.schemas import PaperOrderRow, PerformanceHistoryPoint, PerformanceSummary
 
 
 class PerformanceRepositoryError(RuntimeError):
@@ -127,3 +127,42 @@ def empty_performance_summary() -> PerformanceSummary:
         open_notional_usd=0.0,
         realized_pnl_usd=0.0,
     )
+
+
+def list_recent_orders(limit: int = 20, execution_mode: str = "paper") -> list[PaperOrderRow]:
+    query = """
+        SELECT
+          o.created_at,
+          m.market_ticker,
+          o.side,
+          o.contracts,
+          COALESCE(o.limit_price, 0)::float8 AS limit_price,
+          o.status,
+          td.edge
+        FROM orders o
+        JOIN trade_decisions td ON td.id = o.decision_id
+        JOIN predictions p ON p.id = td.prediction_id
+        JOIN markets m ON m.id = p.market_id
+        WHERE o.execution_mode = %s
+        ORDER BY o.created_at DESC
+        LIMIT %s
+    """
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(query, (execution_mode, limit))
+            rows = cur.fetchall()
+    except Exception as exc:
+        raise PerformanceRepositoryError(f"Failed to load recent orders: {exc}") from exc
+
+    return [
+        PaperOrderRow(
+            created_at=row["created_at"],
+            market_ticker=row["market_ticker"],
+            side=row["side"],
+            contracts=int(row["contracts"]),
+            limit_price=float(row["limit_price"]),
+            status=row["status"],
+            edge=float(row["edge"]),
+        )
+        for row in rows
+    ]

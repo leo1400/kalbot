@@ -10,6 +10,15 @@ This page explains Kalbot in plain English.
 4. Ranks the best opportunities by edge and confidence.
 5. Publishes signals and a simple paper-trading playbook.
 
+## What is real vs demo right now
+
+- Real:
+  - NWS weather data (`weather.gov`).
+  - Kalshi market price/volume snapshots for weather markets.
+  - Kalbot's own paper orders/positions.
+- Demo:
+  - Bot intel leaderboard/copy feed is seeded demo data unless replaced by a real collector.
+
 ## Fast way to follow (paper mode)
 
 1. Run `scripts\run-daily.cmd`.

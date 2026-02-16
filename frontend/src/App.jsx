@@ -79,6 +79,7 @@ export function App() {
   const [quality, setQuality] = useState(null);
   const [performance, setPerformance] = useState(null);
   const [history, setHistory] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [sort, setSort] = useState("impressiveness");
   const [window, setWindow] = useState("all");
   const [error, setError] = useState("");
@@ -98,6 +99,7 @@ export function App() {
         fetchJson(`${API_BASE}/v1/data/quality`),
         fetchJson(`${API_BASE}/v1/performance/summary`),
         fetchJson(`${API_BASE}/v1/performance/history?days=14`),
+        fetchJson(`${API_BASE}/v1/performance/orders?limit=8`),
       ]);
 
       if (requests[0].status === "fulfilled") {
@@ -126,6 +128,9 @@ export function App() {
       }
       if (requests[8].status === "fulfilled") {
         setHistory(requests[8].value);
+      }
+      if (requests[9].status === "fulfilled") {
+        setOrders(requests[9].value);
       }
 
       const hasFailure = requests.some((item) => item.status === "rejected");
@@ -245,6 +250,31 @@ export function App() {
             })}
           </div>
         </div>
+
+        <div className="orders-block">
+          <div className="history-head">
+            <p className="label">Recent Paper Orders</p>
+            <p className="small">These are Kalbot's actual paper bets.</p>
+          </div>
+          <div className="orders-grid">
+            {orders.map((order) => (
+              <article className="order-item" key={`${order.created_at}-${order.market_ticker}-${order.side}`}>
+                <p className="small mono">{order.market_ticker}</p>
+                <p className="small">
+                  {order.side.toUpperCase()} x{order.contracts} @ {toUsd(order.limit_price)}
+                </p>
+                <p className={`small ${order.edge >= 0 ? "up" : "down"}`}>
+                  decision edge: {order.edge >= 0 ? "+" : ""}
+                  {toPercent(order.edge)}
+                </p>
+                <p className="small">{toLocalTime(order.created_at)}</p>
+              </article>
+            ))}
+            {orders.length === 0 && !error ? (
+              <p className="small">No paper orders yet.</p>
+            ) : null}
+          </div>
+        </div>
       </section>
 
       <section className="panel">
@@ -293,6 +323,10 @@ export function App() {
                   {actionLabel(item.action)}
                 </span>
               </div>
+              <p className="small">
+                City: <strong>{item.city_name ?? "Unknown"}</strong>
+                {item.city_code ? ` (${item.city_code})` : ""}
+              </p>
               <div className="metric-grid">
                 <div>
                   <p className="label">Edge</p>
@@ -340,6 +374,10 @@ export function App() {
                   <p className="title">{signal.title}</p>
                   <span className={`edge-pill ${tone.cls}`}>{tone.label}</span>
                 </div>
+                <p className="small">
+                  City: <strong>{signal.city_name ?? "Unknown"}</strong>
+                  {signal.city_code ? ` (${signal.city_code})` : ""}
+                </p>
 
                 <div className="metric-grid">
                   <div>
@@ -462,6 +500,7 @@ export function App() {
                   {toUsd(event.pnl_usd)}
                 </p>
                 <p className="small">{toLocalTime(event.event_time)}</p>
+                <p className="small mono">source: {event.source}</p>
               </article>
             ))}
 

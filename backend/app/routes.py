@@ -17,6 +17,7 @@ from kalbot.performance_repo import (
     empty_performance_summary,
     get_performance_history,
     get_performance_summary,
+    list_recent_orders,
 )
 from kalbot.schemas import (
     BotLeaderboardEntry,
@@ -24,6 +25,7 @@ from kalbot.schemas import (
     DataQualitySnapshot,
     DashboardSummary,
     HealthResponse,
+    PaperOrderRow,
     PlaybookSignal,
     PerformanceHistoryPoint,
     PerformanceSummary,
@@ -136,6 +138,15 @@ def performance_history(days: int = Query(default=14, ge=3, le=90)) -> list[Perf
     settings = get_settings()
     try:
         return get_performance_history(days=days, execution_mode=settings.execution_mode)
+    except PerformanceRepositoryError:
+        return []
+
+
+@router.get("/v1/performance/orders", response_model=list[PaperOrderRow])
+def performance_orders(limit: int = Query(default=12, ge=1, le=100)) -> list[PaperOrderRow]:
+    settings = get_settings()
+    try:
+        return list_recent_orders(limit=limit, execution_mode=settings.execution_mode)
     except PerformanceRepositoryError:
         return []
 
