@@ -6,6 +6,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from kalbot.signals_repo import SignalRepositoryError, publish_demo_signal_for_date
 from kalbot.settings import get_settings
 
 
@@ -63,7 +64,11 @@ class DailyPipeline:
         return f"Execution stub complete (current mode={mode})."
 
     def publish_signal_snapshot(self) -> str:
-        return "Publishing stub complete (DB-backed signal cards pending)."
+        try:
+            return publish_demo_signal_for_date(self.run_date)
+        except SignalRepositoryError as exc:
+            # Pipeline should stay runnable before DB is ready.
+            return f"Skipped DB publish: {exc}"
 
     def run(self) -> PipelineSummary:
         started_at = datetime.now(timezone.utc)

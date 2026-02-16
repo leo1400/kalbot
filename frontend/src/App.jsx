@@ -50,6 +50,13 @@ export function App() {
               <p>Market YES: {(signal.market_implied_yes * 100).toFixed(1)}%</p>
               <p>Edge: {(signal.edge * 100).toFixed(1)} pts</p>
               <p>Confidence: {(signal.confidence * 100).toFixed(1)}%</p>
+              <p className="small">{signal.rationale}</p>
+              <p className="small">
+                Source:{" "}
+                <a href={signal.data_source_url} target="_blank" rel="noreferrer">
+                  {signal.data_source_url}
+                </a>
+              </p>
             </article>
           ))}
           {signals.length === 0 && !error ? <p>No signals yet.</p> : null}

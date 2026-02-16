@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter
 
 from kalbot.schemas import HealthResponse, SignalCard
+from kalbot.signals_repo import SignalRepositoryError, list_current_signals
 from kalbot.settings import get_settings
 
 router = APIRouter()
@@ -22,19 +23,23 @@ def health() -> HealthResponse:
 
 @router.get("/v1/signals/current", response_model=list[SignalCard])
 def current_signals() -> list[SignalCard]:
-    # Placeholder signal returned until DB-backed publishing is wired.
+    try:
+        signals = list_current_signals(limit=20)
+        if signals:
+            return signals
+    except SignalRepositoryError:
+        # Keep API useful before DB is fully wired in every environment.
+        pass
+
     return [
         SignalCard(
-            market_ticker="WEATHER-NYC-2026-02-17-HIGH-GT-45",
-            title="NYC high temperature above 45F on Feb 17, 2026",
+            market_ticker="WEATHER-NYC-BOOTSTRAP-HIGH-GT-45",
+            title="Bootstrap signal (DB not yet populated)",
             probability_yes=0.61,
             market_implied_yes=0.54,
             edge=0.07,
             confidence=0.69,
-            rationale=(
-                "Prototype signal from baseline model. Replace with live features "
-                "and daily-trained output in next phase."
-            ),
+            rationale="Run the daily worker to publish live rows into Postgres.",
             data_source_url="https://www.weather.gov/",
         )
     ]

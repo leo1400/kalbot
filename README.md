@@ -35,5 +35,13 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
    - `./scripts/start-backend.ps1`
 7. Run daily pipeline stub:
    - `./scripts/run-daily.ps1`
+8. Start frontend:
+   - `./scripts/start-frontend.ps1`
+
+## Live local view
+
+- Frontend dashboard: `http://localhost:5173`
+- API docs: `http://localhost:8000/docs`
+- Current signals endpoint: `http://localhost:8000/v1/signals/current`
 
 Daily run summaries are written to `artifacts/daily/<YYYY-MM-DD>/run-summary.json`.
