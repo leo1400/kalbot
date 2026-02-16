@@ -39,11 +39,13 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
      - `psql "postgresql://postgres:postgres@localhost:5432/kalbot" -f infra/migrations/002_bot_intel.sql`
 6. Start backend:
    - `scripts\start-backend.cmd`
+   - Optional hot-reload: `scripts\start-backend.cmd -Reload`
 7. Run daily pipeline stub:
    - `scripts\run-daily.cmd`
 8. Start frontend:
    - `scripts\start-frontend.cmd`
    - If `npm` is not installed, this script auto-starts frontend in Docker.
+   - If port `8000` is unhealthy, the script auto-tries `http://localhost:8001`.
 
 ## Live local view
 
