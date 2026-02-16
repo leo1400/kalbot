@@ -82,3 +82,17 @@ class DataQualitySnapshot(BaseModel):
     latest_snapshot_age_min: float | None
     quality_score: float
     status: str
+
+
+class PlaybookSignal(BaseModel):
+    market_ticker: str
+    title: str
+    action: str
+    edge: float
+    confidence: float
+    probability_yes: float
+    market_implied_yes: float
+    suggested_contracts: int
+    suggested_notional_usd: float
+    entry_price: float
+    note: str

@@ -9,7 +9,7 @@ from psycopg import errors
 
 from kalbot.db import get_connection
 from kalbot.modeling.low_temp_model import load_low_temp_model
-from kalbot.schemas import DashboardSummary, SignalCard
+from kalbot.schemas import DashboardSummary, PlaybookSignal, SignalCard
 from kalbot.settings import Settings, get_settings
 
 
@@ -95,6 +95,51 @@ def list_current_signals(limit: int = 20) -> list[SignalCard]:
         )
         for row in rows
     ]
+
+
+def list_signal_playbook(limit: int = 6) -> list[PlaybookSignal]:
+    settings = get_settings()
+    signals = list_current_signals(limit=limit)
+    playbook: list[PlaybookSignal] = []
+
+    for signal in signals:
+        action = _derive_playbook_action(
+            edge=signal.edge,
+            confidence=signal.confidence,
+            edge_threshold=settings.paper_edge_threshold,
+        )
+        entry_price = _playbook_entry_price(action=action, market_yes=signal.market_implied_yes)
+        suggested_notional = _suggested_notional(
+            action=action,
+            confidence=signal.confidence,
+            edge=signal.edge,
+            max_notional=settings.max_notional_per_signal_usd,
+            edge_threshold=settings.paper_edge_threshold,
+        )
+        suggested_contracts = _contracts_for_notional(
+            entry_price=entry_price,
+            max_notional=suggested_notional,
+            max_contracts=settings.max_contracts_per_order,
+        )
+        note = _playbook_note(action=action, edge=signal.edge, confidence=signal.confidence)
+
+        playbook.append(
+            PlaybookSignal(
+                market_ticker=signal.market_ticker,
+                title=signal.title,
+                action=action,
+                edge=signal.edge,
+                confidence=signal.confidence,
+                probability_yes=signal.probability_yes,
+                market_implied_yes=signal.market_implied_yes,
+                suggested_contracts=suggested_contracts,
+                suggested_notional_usd=round(suggested_notional, 2),
+                entry_price=round(entry_price, 4),
+                note=note,
+            )
+        )
+
+    return playbook
 
 
 def get_dashboard_summary() -> DashboardSummary:
@@ -658,6 +703,54 @@ def _condition_label(condition: dict[str, float | str | None]) -> str:
         high = float(condition["high"])
         return f"{low}-{high}F"
     return "unknown"
+
+
+def _derive_playbook_action(edge: float, confidence: float, edge_threshold: float) -> str:
+    if confidence < 0.58:
+        return "pass"
+    if edge >= edge_threshold:
+        return "lean_yes"
+    if edge <= -edge_threshold:
+        return "lean_no"
+    return "pass"
+
+
+def _playbook_entry_price(action: str, market_yes: float) -> float:
+    clamped_yes = _clamp(market_yes, 0.01, 0.99)
+    if action == "lean_no":
+        return _clamp(1.0 - clamped_yes, 0.01, 0.99)
+    return clamped_yes
+
+
+def _suggested_notional(
+    action: str, confidence: float, edge: float, max_notional: float, edge_threshold: float
+) -> float:
+    if action == "pass":
+        return 0.0
+    if max_notional <= 0:
+        return 0.0
+
+    confidence_weight = _clamp((confidence - 0.55) / 0.40, 0.0, 1.0)
+    edge_weight = _clamp(abs(edge) / max(edge_threshold * 2.0, 0.01), 0.0, 1.0)
+    sizing_weight = 0.35 + (0.65 * confidence_weight * edge_weight)
+    return max_notional * sizing_weight
+
+
+def _playbook_note(action: str, edge: float, confidence: float) -> str:
+    if action == "pass":
+        return "Skip for now. Edge/confidence is not strong enough."
+    direction = "YES" if action == "lean_yes" else "NO"
+    return (
+        f"Model leans {direction}. Edge={edge * 100:.1f} pts, "
+        f"confidence={confidence * 100:.1f}%."
+    )
+
+
+def _contracts_for_notional(entry_price: float, max_notional: float, max_contracts: int) -> int:
+    if entry_price <= 0 or max_notional <= 0 or max_contracts <= 0:
+        return 0
+    affordable = int(max_notional // entry_price)
+    return max(0, min(affordable, max_contracts))
 
 
 def _clamp(value: float, low: float, high: float) -> float:

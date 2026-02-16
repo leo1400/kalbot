@@ -136,7 +136,7 @@ h2 {
   margin-top: 16px;
   display: grid;
   gap: 9px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .chip {
@@ -289,6 +289,32 @@ h2 {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
+.playbook-grid {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.playbook-card {
+  border: 1px solid rgba(24, 57, 86, 0.2);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.playbook-card.lean_yes {
+  border-color: rgba(16, 156, 114, 0.35);
+}
+
+.playbook-card.lean_no {
+  border-color: rgba(178, 79, 79, 0.35);
+}
+
+.playbook-card.pass {
+  border-color: rgba(90, 111, 133, 0.3);
+}
+
 .signal-card {
   border: 1px solid rgba(24, 57, 86, 0.2);
   border-radius: 12px;
@@ -439,6 +465,20 @@ h2 {
   max-height: 720px;
   overflow-y: auto;
   padding-right: 3px;
+}
+
+.glossary-grid {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.glossary-item {
+  border: 1px solid rgba(30, 60, 89, 0.16);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .activity-item {

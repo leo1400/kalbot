@@ -24,6 +24,7 @@ from kalbot.schemas import (
     DataQualitySnapshot,
     DashboardSummary,
     HealthResponse,
+    PlaybookSignal,
     PerformanceHistoryPoint,
     PerformanceSummary,
     SignalCard,
@@ -32,6 +33,7 @@ from kalbot.signals_repo import (
     SignalRepositoryError,
     get_dashboard_summary,
     list_current_signals,
+    list_signal_playbook,
 )
 from kalbot.settings import get_settings
 
@@ -72,6 +74,14 @@ def current_signals() -> list[SignalCard]:
             data_source_url="https://www.weather.gov/",
         )
     ]
+
+
+@router.get("/v1/signals/playbook", response_model=list[PlaybookSignal])
+def signal_playbook(limit: int = Query(default=6, ge=1, le=20)) -> list[PlaybookSignal]:
+    try:
+        return list_signal_playbook(limit=limit)
+    except SignalRepositoryError:
+        return []
 
 
 @router.get("/v1/dashboard/summary", response_model=DashboardSummary)

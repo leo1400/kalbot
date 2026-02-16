@@ -2,6 +2,17 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 const EDGE_APPROVE_THRESHOLD = 0.03;
+const NOOB_TERMS = [
+  { term: "YES Share", definition: "A contract that pays $1 if the event happens." },
+  { term: "NO Share", definition: "A contract that pays $1 if the event does not happen." },
+  { term: "Model YES", definition: "What Kalbot thinks the chance is (in %)." },
+  { term: "Market YES", definition: "What current market prices imply (in %)." },
+  { term: "Edge", definition: "Model minus market. Bigger absolute edge means stronger disagreement." },
+  { term: "Confidence", definition: "How trustworthy this model estimate is right now." },
+  { term: "Notional", definition: "Total dollars at risk (price x contracts)." },
+  { term: "PnL", definition: "Profit and loss. Positive means winning, negative means losing." },
+  { term: "Pass", definition: "No trade. Edge/confidence is too weak." },
+];
 
 function toPercent(value, digits = 1) {
   return `${(value * 100).toFixed(digits)}%`;
@@ -40,6 +51,16 @@ function edgeTone(edge) {
   return { label: "No Edge", cls: "flat" };
 }
 
+function actionLabel(action) {
+  if (action === "lean_yes") {
+    return "Lean YES";
+  }
+  if (action === "lean_no") {
+    return "Lean NO";
+  }
+  return "Pass";
+}
+
 async function fetchJson(url) {
   const response = await fetch(url);
   if (!response.ok) {
@@ -52,6 +73,7 @@ export function App() {
   const [health, setHealth] = useState(null);
   const [summary, setSummary] = useState(null);
   const [signals, setSignals] = useState([]);
+  const [playbook, setPlaybook] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
   const [activity, setActivity] = useState([]);
   const [quality, setQuality] = useState(null);
@@ -68,6 +90,7 @@ export function App() {
         fetchJson(`${API_BASE}/health`),
         fetchJson(`${API_BASE}/v1/dashboard/summary`),
         fetchJson(`${API_BASE}/v1/signals/current`),
+        fetchJson(`${API_BASE}/v1/signals/playbook?limit=6`),
         fetchJson(
           `${API_BASE}/v1/intel/leaderboard?sort=${encodeURIComponent(sort)}&window=${encodeURIComponent(window)}&limit=10`
         ),
@@ -87,19 +110,22 @@ export function App() {
         setSignals(requests[2].value);
       }
       if (requests[3].status === "fulfilled") {
-        setLeaderboard(requests[3].value);
+        setPlaybook(requests[3].value);
       }
       if (requests[4].status === "fulfilled") {
-        setActivity(requests[4].value);
+        setLeaderboard(requests[4].value);
       }
       if (requests[5].status === "fulfilled") {
-        setQuality(requests[5].value);
+        setActivity(requests[5].value);
       }
       if (requests[6].status === "fulfilled") {
-        setPerformance(requests[6].value);
+        setQuality(requests[6].value);
       }
       if (requests[7].status === "fulfilled") {
-        setHistory(requests[7].value);
+        setPerformance(requests[7].value);
+      }
+      if (requests[8].status === "fulfilled") {
+        setHistory(requests[8].value);
       }
 
       const hasFailure = requests.some((item) => item.status === "rejected");
@@ -255,6 +281,51 @@ export function App() {
 
       <section className="panel">
         <div className="section-head">
+          <h2>How To Follow Today (Paper)</h2>
+          <p className="small">Simple plan from the model. Start here if you are new.</p>
+        </div>
+        <div className="playbook-grid">
+          {playbook.map((item) => (
+            <article className={`playbook-card ${item.action}`} key={item.market_ticker}>
+              <div className="signal-head">
+                <p className="title">{item.title}</p>
+                <span className={`edge-pill ${item.action === "pass" ? "flat" : item.action === "lean_yes" ? "pos" : "neg"}`}>
+                  {actionLabel(item.action)}
+                </span>
+              </div>
+              <div className="metric-grid">
+                <div>
+                  <p className="label">Edge</p>
+                  <p className={`metric ${item.edge >= 0 ? "up" : "down"}`}>
+                    {item.edge >= 0 ? "+" : ""}
+                    {toPercent(item.edge)}
+                  </p>
+                </div>
+                <div>
+                  <p className="label">Confidence</p>
+                  <p className="metric">{toPercent(item.confidence)}</p>
+                </div>
+                <div>
+                  <p className="label">Paper Size</p>
+                  <p className="metric">
+                    {item.suggested_contracts} @ {toUsd(item.entry_price)}
+                  </p>
+                </div>
+              </div>
+              <p className="small">
+                Suggested notional: <strong>{toUsd(item.suggested_notional_usd)}</strong>
+              </p>
+              <p className="small">{item.note}</p>
+            </article>
+          ))}
+        </div>
+        {playbook.length === 0 && !error ? (
+          <p className="small">No playbook rows yet. Run `scripts\\run-daily.cmd`.</p>
+        ) : null}
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
           <h2>Current Signals</h2>
           <p className="small">Active ranked entries</p>
         </div>
@@ -399,6 +470,21 @@ export function App() {
             ) : null}
           </div>
         </section>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <h2>Noob Glossary</h2>
+          <p className="small">Quick definitions so the dashboard is easier to read.</p>
+        </div>
+        <div className="glossary-grid">
+          {NOOB_TERMS.map((item) => (
+            <article className="glossary-item" key={item.term}>
+              <p className="label">{item.term}</p>
+              <p className="small">{item.definition}</p>
+            </article>
+          ))}
+        </div>
       </section>
     </main>
   );

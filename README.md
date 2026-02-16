@@ -50,12 +50,17 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
 - Frontend dashboard: `http://localhost:5173`
 - API docs: `http://localhost:8000/docs`
 - Current signals endpoint: `http://localhost:8000/v1/signals/current`
+- Signal playbook endpoint: `http://localhost:8000/v1/signals/playbook?limit=6`
 - Dashboard summary endpoint: `http://localhost:8000/v1/dashboard/summary`
 - Bot intel leaderboard: `http://localhost:8000/v1/intel/leaderboard?sort=impressiveness&window=all&limit=10`
 - Copy activity endpoint: `http://localhost:8000/v1/intel/activity?limit=12`
 - Performance summary endpoint: `http://localhost:8000/v1/performance/summary`
 - Performance history endpoint: `http://localhost:8000/v1/performance/history?days=14`
 - Data quality endpoint: `http://localhost:8000/v1/data/quality`
+
+## Beginner guide
+
+- `docs/kalbot-noob-guide.md` explains the dashboard and terms in plain language, plus a safe paper-trading follow routine.
 
 ## No npm on Windows
 
