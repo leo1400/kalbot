@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query
 
+from kalbot.backtest_repo import BacktestRepositoryError, get_backtest_summary
 from kalbot.bot_intel_repo import (
     BotIntelRepositoryError,
     get_bot_leaderboard,
@@ -30,6 +31,7 @@ from kalbot.provenance_repo import (
 from kalbot.schemas import (
     AccuracyHistoryPoint,
     AccuracySummary,
+    BacktestSummary,
     BotLeaderboardEntry,
     CopyActivityEvent,
     DataQualitySnapshot,
@@ -164,6 +166,24 @@ def performance_accuracy_history(
         return get_accuracy_history(days=days, execution_mode=settings.execution_mode)
     except PerformanceRepositoryError:
         return []
+
+
+@router.get("/v1/performance/backtest", response_model=BacktestSummary)
+def performance_backtest(days: int = Query(default=60, ge=14, le=365)) -> BacktestSummary:
+    try:
+        return get_backtest_summary(days=days)
+    except BacktestRepositoryError:
+        return BacktestSummary(
+            window_days=days,
+            settled_samples=0,
+            model_brier=None,
+            market_brier=None,
+            model_log_loss=None,
+            market_log_loss=None,
+            brier_edge=None,
+            log_loss_edge=None,
+            updated_at_utc=datetime.now(timezone.utc),
+        )
 
 
 @router.get("/v1/data/quality", response_model=DataQualitySnapshot)

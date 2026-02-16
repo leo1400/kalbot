@@ -93,6 +93,18 @@ class AccuracyHistoryPoint(BaseModel):
     max_drawdown: float | None
 
 
+class BacktestSummary(BaseModel):
+    window_days: int
+    settled_samples: int
+    model_brier: float | None
+    market_brier: float | None
+    model_log_loss: float | None
+    market_log_loss: float | None
+    brier_edge: float | None
+    log_loss_edge: float | None
+    updated_at_utc: datetime
+
+
 class DataQualitySnapshot(BaseModel):
     target_stations: int
     stations_with_forecast_6h: int

@@ -22,6 +22,7 @@ def test_default_paper_risk_caps() -> None:
     assert settings.max_notional_per_signal_usd == 125.0
     assert settings.max_daily_notional_usd == 500.0
     assert settings.max_contracts_per_order == 25
+    assert settings.backtest_window_days == 60
 
 
 def test_default_bot_intel_is_real_first() -> None:

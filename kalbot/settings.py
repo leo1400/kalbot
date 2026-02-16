@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     max_notional_per_signal_usd: float = Field(default=125.0)
     max_daily_notional_usd: float = Field(default=500.0)
     max_contracts_per_order: int = Field(default=25)
+    backtest_window_days: int = Field(default=60)
 
     weather_api_base: str = Field(default="https://api.weather.gov")
     weather_user_agent: str = Field(default="kalbot-dev (kalbot@example.com)")

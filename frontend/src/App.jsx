@@ -102,6 +102,7 @@ export function App() {
   const [history, setHistory] = useState([]);
   const [orders, setOrders] = useState([]);
   const [accuracy, setAccuracy] = useState(null);
+  const [backtest, setBacktest] = useState(null);
   const [sort, setSort] = useState("impressiveness");
   const [window, setWindow] = useState("all");
   const [error, setError] = useState("");
@@ -124,6 +125,7 @@ export function App() {
         fetchJson(`${API_BASE}/v1/performance/history?days=14`),
         fetchJson(`${API_BASE}/v1/performance/orders?limit=8`),
         fetchJson(`${API_BASE}/v1/performance/accuracy?days=30`),
+        fetchJson(`${API_BASE}/v1/performance/backtest?days=60`),
       ]);
 
       if (requests[0].status === "fulfilled") {
@@ -161,6 +163,9 @@ export function App() {
       }
       if (requests[11].status === "fulfilled") {
         setAccuracy(requests[11].value);
+      }
+      if (requests[12].status === "fulfilled") {
+        setBacktest(requests[12].value);
       }
 
       const hasFailure = requests.some((item) => item.status === "rejected");
@@ -200,6 +205,15 @@ export function App() {
   const calText = accuracy?.calibration_error === null || accuracy?.calibration_error === undefined
     ? "n/a"
     : toPercent(accuracy.calibration_error, 2);
+  const modelBrierText = backtest?.model_brier === null || backtest?.model_brier === undefined
+    ? "n/a"
+    : backtest.model_brier.toFixed(4);
+  const marketBrierText = backtest?.market_brier === null || backtest?.market_brier === undefined
+    ? "n/a"
+    : backtest.market_brier.toFixed(4);
+  const brierEdgeText = backtest?.brier_edge === null || backtest?.brier_edge === undefined
+    ? "n/a"
+    : `${backtest.brier_edge >= 0 ? "+" : ""}${backtest.brier_edge.toFixed(4)}`;
 
   return (
     <main className="page">
@@ -358,6 +372,25 @@ export function App() {
             <p className="label">Calibration Error</p>
             <p className="metric-main">{calText}</p>
             <p className="small">Average probability miss</p>
+          </article>
+        </div>
+        <div className="execution-grid" style={{ marginTop: "9px" }}>
+          <article className="metric-card">
+            <p className="label">Model Brier (60D)</p>
+            <p className="metric-main">{modelBrierText}</p>
+            <p className="small">Settled samples: {backtest?.settled_samples ?? 0}</p>
+          </article>
+          <article className="metric-card">
+            <p className="label">Market Brier (60D)</p>
+            <p className="metric-main">{marketBrierText}</p>
+            <p className="small">Market-implied baseline</p>
+          </article>
+          <article className="metric-card">
+            <p className="label">Brier Edge</p>
+            <p className={`metric-main ${(backtest?.brier_edge ?? 0) >= 0 ? "up" : "down"}`}>
+              {brierEdgeText}
+            </p>
+            <p className="small">Positive means Kalbot beat market</p>
           </article>
         </div>
       </section>

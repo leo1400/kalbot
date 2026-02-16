@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Callable
 
 from kalbot.bot_intel_repo import BotIntelRepositoryError, refresh_bot_intel
+from kalbot.backtest_repo import BacktestRepositoryError, write_backtest_report
 from kalbot.kalshi_ingest import KalshiIngestError, ingest_kalshi_weather_markets
 from kalbot.modeling.low_temp_model import (
     build_low_temp_training_features,
@@ -117,6 +118,15 @@ class DailyPipeline:
         except SettlementRepositoryError as exc:
             return f"Settlement reconcile skipped: {exc}"
 
+    def evaluate_backtest(self) -> str:
+        try:
+            return write_backtest_report(
+                run_date=self.run_date,
+                days=max(7, self.settings.backtest_window_days),
+            )
+        except BacktestRepositoryError as exc:
+            return f"Backtest skipped: {exc}"
+
     def simulate_execution(self) -> str:
         try:
             return execute_paper_trades(self.run_date)
@@ -140,6 +150,7 @@ class DailyPipeline:
         started_at = datetime.now(timezone.utc)
         self._run_step("ingest_data", self.ingest_data)
         self._run_step("reconcile_market_outcomes", self.reconcile_market_outcomes)
+        self._run_step("evaluate_backtest", self.evaluate_backtest)
         self._run_step("build_features", self.build_features)
         self._run_step("train_and_calibrate", self.train_and_calibrate)
         self._run_step("score_and_decide", self.score_and_decide)
