@@ -46,6 +46,7 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
    - `scripts\start-frontend.cmd`
    - If `npm` is not installed, this script auto-starts frontend in Docker.
    - If port `8000` is unhealthy, the script auto-tries `http://localhost:8001`.
+   - Docker frontend is recreated with detected `VITE_API_BASE` on each run.
 
 ## Live local view
 
