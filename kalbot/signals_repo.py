@@ -15,20 +15,32 @@ class SignalRepositoryError(RuntimeError):
 
 def list_current_signals(limit: int = 20) -> list[SignalCard]:
     query = """
+        WITH latest_signals AS (
+          SELECT DISTINCT ON (ps.market_id)
+            ps.market_id,
+            ps.model_run_id,
+            ps.confidence,
+            ps.rationale,
+            ps.data_source_url,
+            ps.published_at
+          FROM published_signals ps
+          WHERE ps.is_active = TRUE
+          ORDER BY ps.market_id, ps.published_at DESC
+        )
         SELECT
           m.market_ticker,
           m.title,
           p.prob_yes AS probability_yes,
           COALESCE(ms.last_price_yes, p.prob_yes) AS market_implied_yes,
           p.prob_yes - COALESCE(ms.last_price_yes, p.prob_yes) AS edge,
-          ps.confidence,
-          ps.rationale,
-          ps.data_source_url
-        FROM published_signals ps
-        JOIN markets m ON m.id = ps.market_id
+          ls.confidence,
+          ls.rationale,
+          ls.data_source_url
+        FROM latest_signals ls
+        JOIN markets m ON m.id = ls.market_id
         JOIN predictions p
-          ON p.market_id = ps.market_id
-         AND p.model_run_id = ps.model_run_id
+          ON p.market_id = ls.market_id
+         AND p.model_run_id = ls.model_run_id
         LEFT JOIN LATERAL (
           SELECT last_price_yes
           FROM market_snapshots ms
@@ -36,8 +48,7 @@ def list_current_signals(limit: int = 20) -> list[SignalCard]:
           ORDER BY ms.captured_at DESC
           LIMIT 1
         ) ms ON TRUE
-        WHERE ps.is_active = TRUE
-        ORDER BY ps.published_at DESC
+        ORDER BY ls.published_at DESC
         LIMIT %s
     """
     try:
@@ -161,6 +172,17 @@ def publish_demo_signal_for_date(run_date: date) -> str:
                     "Demo published signal seeded by daily worker. Replace with real features and model output.",
                     "https://www.weather.gov/",
                 ),
+            )
+            # Keep only the latest published row active for this market.
+            cur.execute(
+                """
+                UPDATE published_signals
+                SET is_active = FALSE
+                WHERE market_id = %s
+                  AND model_run_id <> %s
+                  AND is_active = TRUE
+                """,
+                (market_id, model_run_id),
             )
     except errors.UndefinedTable as exc:
         raise SignalRepositoryError(

@@ -158,11 +158,11 @@ def get_bot_leaderboard(
     window: str = "all", sort: str = "impressiveness", limit: int = 20
 ) -> list[BotLeaderboardEntry]:
     sort_sql = {
-        "impressiveness": "s.impressiveness_score DESC",
-        "pnl": "s.pnl_usd DESC",
-        "volume": "s.volume_usd DESC",
-        "roi": "s.roi_pct DESC",
-    }.get(sort, "s.impressiveness_score DESC")
+        "impressiveness": "l.impressiveness_score DESC",
+        "pnl": "l.pnl_usd DESC",
+        "volume": "l.volume_usd DESC",
+        "roi": "l.roi_pct DESC",
+    }.get(sort, "l.impressiveness_score DESC")
 
     query = f"""
         WITH latest AS (
