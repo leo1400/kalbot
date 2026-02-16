@@ -43,6 +43,7 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
    - `scripts\run-daily.cmd`
 8. Start frontend:
    - `scripts\start-frontend.cmd`
+   - If `npm` is not installed, this script auto-starts frontend in Docker.
 
 ## Live local view
 
@@ -50,5 +51,13 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
 - API docs: `http://localhost:8000/docs`
 - Current signals endpoint: `http://localhost:8000/v1/signals/current`
 - Bot intel leaderboard: `http://localhost:8000/v1/intel/leaderboard?sort=impressiveness&window=all&limit=10`
+
+## No npm on Windows
+
+If you don't have Node/npm installed, use:
+
+- `scripts\start-frontend.cmd`
+
+The script will run the frontend in Docker via profile `ui`.
 
 Daily run summaries are written to `artifacts/daily/<YYYY-MM-DD>/run-summary.json`.
