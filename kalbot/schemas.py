@@ -34,3 +34,21 @@ class BotLeaderboardEntry(BaseModel):
     impressiveness_score: float
     snapshot_date: str
     source: str
+
+
+class DashboardSummary(BaseModel):
+    active_signal_count: int
+    avg_confidence: float
+    avg_edge: float
+    strongest_edge: float
+    updated_at_utc: datetime
+
+
+class CopyActivityEvent(BaseModel):
+    event_time: datetime
+    follower_alias: str
+    leader_display_name: str
+    market_ticker: str
+    side: str
+    contracts: int
+    pnl_usd: float

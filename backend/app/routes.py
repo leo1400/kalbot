@@ -2,9 +2,23 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query
 
-from kalbot.bot_intel_repo import BotIntelRepositoryError, get_bot_leaderboard
-from kalbot.schemas import BotLeaderboardEntry, HealthResponse, SignalCard
-from kalbot.signals_repo import SignalRepositoryError, list_current_signals
+from kalbot.bot_intel_repo import (
+    BotIntelRepositoryError,
+    get_bot_leaderboard,
+    list_recent_copy_activity,
+)
+from kalbot.schemas import (
+    BotLeaderboardEntry,
+    CopyActivityEvent,
+    DashboardSummary,
+    HealthResponse,
+    SignalCard,
+)
+from kalbot.signals_repo import (
+    SignalRepositoryError,
+    get_dashboard_summary,
+    list_current_signals,
+)
 from kalbot.settings import get_settings
 
 router = APIRouter()
@@ -46,6 +60,20 @@ def current_signals() -> list[SignalCard]:
     ]
 
 
+@router.get("/v1/dashboard/summary", response_model=DashboardSummary)
+def dashboard_summary() -> DashboardSummary:
+    try:
+        return get_dashboard_summary()
+    except SignalRepositoryError:
+        return DashboardSummary(
+            active_signal_count=0,
+            avg_confidence=0.0,
+            avg_edge=0.0,
+            strongest_edge=0.0,
+            updated_at_utc=datetime.now(timezone.utc),
+        )
+
+
 @router.get("/v1/intel/leaderboard", response_model=list[BotLeaderboardEntry])
 def bot_leaderboard(
     sort: str = Query(default="impressiveness", pattern="^(impressiveness|pnl|volume|roi)$"),
@@ -60,3 +88,11 @@ def bot_leaderboard(
         pass
 
     return []
+
+
+@router.get("/v1/intel/activity", response_model=list[CopyActivityEvent])
+def copy_activity(limit: int = Query(default=12, ge=1, le=100)) -> list[CopyActivityEvent]:
+    try:
+        return list_recent_copy_activity(limit=limit)
+    except BotIntelRepositoryError:
+        return []

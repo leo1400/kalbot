@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from psycopg import errors
 
 from kalbot.db import get_connection
-from kalbot.schemas import BotLeaderboardEntry
+from kalbot.schemas import BotLeaderboardEntry, CopyActivityEvent
 
 
 class BotIntelRepositoryError(RuntimeError):
@@ -218,3 +218,42 @@ def get_bot_leaderboard(
             )
         )
     return entries
+
+
+def list_recent_copy_activity(limit: int = 20) -> list[CopyActivityEvent]:
+    query = """
+        SELECT
+          c.event_time,
+          c.follower_alias,
+          t.display_name AS leader_display_name,
+          c.market_ticker,
+          c.side,
+          c.contracts,
+          c.pnl_usd
+        FROM copy_activity_events c
+        JOIN tracked_traders t ON t.id = c.leader_trader_id
+        ORDER BY c.event_time DESC
+        LIMIT %s
+    """
+
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(query, (limit,))
+            rows = cur.fetchall()
+    except Exception as exc:
+        raise BotIntelRepositoryError(f"Failed to load copy activity: {exc}") from exc
+
+    events: list[CopyActivityEvent] = []
+    for row in rows:
+        events.append(
+            CopyActivityEvent(
+                event_time=row["event_time"],
+                follower_alias=row["follower_alias"],
+                leader_display_name=row["leader_display_name"],
+                market_ticker=row["market_ticker"],
+                side=row["side"],
+                contracts=int(row["contracts"]),
+                pnl_usd=float(row["pnl_usd"]),
+            )
+        )
+    return events

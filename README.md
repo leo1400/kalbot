@@ -50,7 +50,9 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
 - Frontend dashboard: `http://localhost:5173`
 - API docs: `http://localhost:8000/docs`
 - Current signals endpoint: `http://localhost:8000/v1/signals/current`
+- Dashboard summary endpoint: `http://localhost:8000/v1/dashboard/summary`
 - Bot intel leaderboard: `http://localhost:8000/v1/intel/leaderboard?sort=impressiveness&window=all&limit=10`
+- Copy activity endpoint: `http://localhost:8000/v1/intel/activity?limit=12`
 
 ## No npm on Windows
 
@@ -78,6 +80,7 @@ Daily run summaries are written to `artifacts/daily/<YYYY-MM-DD>/run-summary.jso
 - Signal publishing now attempts a live NYC low-temperature heuristic using:
   - Kalshi `KXLOWT*` market prices (city-derived)
   - NWS forecast temperatures for corresponding station candidates (`K<city>`, `<city>`)
+- Active signal publishing now ranks multiple low-temp candidates by edge, forecast coverage, and liquidity, then publishes a top set each run.
 - Configure category/limits with:
   - `KALBOT_KALSHI_WEATHER_CATEGORY`
   - `KALBOT_KALSHI_WEATHER_SERIES_LIMIT`

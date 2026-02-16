@@ -20,11 +20,22 @@ def test_extract_low_temp_city_code() -> None:
 
 
 def test_parse_low_temp_condition_range() -> None:
-    c = _parse_low_temp_condition("Will the minimum temperature be  50-51° on Feb 17, 2026?")
+    c = _parse_low_temp_condition(
+        "Will the minimum temperature be 50-51\u00B0 on Feb 17, 2026?"
+    )
     assert c is not None
     assert c["kind"] == "range"
     assert c["low"] == 50.0
     assert c["high"] == 51.0
+
+
+def test_parse_low_temp_condition_gt_with_proper_degree_symbol() -> None:
+    c = _parse_low_temp_condition(
+        "Will the minimum temperature be >54\u00B0 on Feb 17, 2026?"
+    )
+    assert c is not None
+    assert c["kind"] == "gt"
+    assert c["low"] == 54.0
 
 
 def test_condition_probability_gt_is_small_if_mu_below_threshold() -> None:

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     execution_mode: str = Field(default="paper")
     model_name: str = Field(default="baseline-logit-v1")
     model_refresh_hour_utc: int = Field(default=4)
+    signal_publish_limit: int = Field(default=4)
 
     weather_api_base: str = Field(default="https://api.weather.gov")
     weather_user_agent: str = Field(default="kalbot-dev (kalbot@example.com)")
