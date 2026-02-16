@@ -69,3 +69,16 @@ Daily run summaries are written to `artifacts/daily/<YYYY-MM-DD>/run-summary.jso
   - `weather_observations`
 - Configure targets with:
   - `KALBOT_WEATHER_TARGETS=nyc:40.7128,-74.0060;chi:41.8781,-87.6298;mia:25.7617,-80.1918`
+
+## Kalshi ingestion
+
+- Daily worker now ingests live Kalshi weather-category markets into:
+  - `markets`
+  - `market_snapshots`
+- Signal publishing now attempts a live NYC low-temperature heuristic using:
+  - Kalshi `KXLOWT*` market prices (city-derived)
+  - NWS forecast temperatures for corresponding station candidates (`K<city>`, `<city>`)
+- Configure category/limits with:
+  - `KALBOT_KALSHI_WEATHER_CATEGORY`
+  - `KALBOT_KALSHI_WEATHER_SERIES_LIMIT`
+  - `KALBOT_KALSHI_MARKETS_PER_SERIES`

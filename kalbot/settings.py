@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     kalshi_api_base: str = Field(default="https://api.elections.kalshi.com/trade-api/v2")
     kalshi_api_key_id: str | None = Field(default=None)
     kalshi_private_key_path: str | None = Field(default=None)
+    kalshi_ingest_enabled: bool = Field(default=True)
+    kalshi_weather_category: str = Field(default="Climate and Weather")
+    kalshi_weather_series_limit: int = Field(default=12)
+    kalshi_markets_per_series: int = Field(default=40)
+    kalshi_series_page_size: int = Field(default=200)
 
     execution_mode: str = Field(default="paper")
     model_name: str = Field(default="baseline-logit-v1")
@@ -27,7 +32,10 @@ class Settings(BaseSettings):
     weather_api_base: str = Field(default="https://api.weather.gov")
     weather_user_agent: str = Field(default="kalbot-dev (kalbot@example.com)")
     weather_targets: str = Field(
-        default="nyc:40.7128,-74.0060;chi:41.8781,-87.6298;mia:25.7617,-80.1918"
+        default=(
+            "nyc:40.7128,-74.0060;chi:41.8781,-87.6298;"
+            "mia:25.7617,-80.1918;lax:33.9416,-118.4085"
+        )
     )
     weather_forecast_hours: int = Field(default=24)
 

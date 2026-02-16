@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Callable
 
 from kalbot.bot_intel_repo import BotIntelRepositoryError, seed_demo_bot_intel
-from kalbot.signals_repo import SignalRepositoryError, publish_demo_signal_for_date
+from kalbot.kalshi_ingest import KalshiIngestError, ingest_kalshi_weather_markets
+from kalbot.signals_repo import SignalRepositoryError, publish_best_signal_for_date
 from kalbot.settings import get_settings
 from kalbot.weather_ingest import WeatherIngestError, ingest_weather_data
 
@@ -48,19 +49,35 @@ class DailyPipeline:
             raise
 
     def ingest_data(self) -> str:
-        try:
-            summary = ingest_weather_data(self.settings)
-        except WeatherIngestError as exc:
-            return f"Skipped weather ingestion: {exc}"
+        messages: list[str] = []
 
-        status = (
-            f"Weather ingest complete: targets={summary.targets_succeeded}/"
-            f"{summary.targets_attempted}, forecast_rows={summary.forecast_rows_written}, "
-            f"observation_rows={summary.observation_rows_written}"
-        )
-        if summary.target_failures:
-            status += f", failures={len(summary.target_failures)}"
-        return status
+        try:
+            weather = ingest_weather_data(self.settings)
+            messages.append(
+                "weather "
+                f"targets={weather.targets_succeeded}/{weather.targets_attempted}, "
+                f"forecast_rows={weather.forecast_rows_written}, "
+                f"observation_rows={weather.observation_rows_written}"
+            )
+            if weather.target_failures:
+                messages.append(f"weather_failures={len(weather.target_failures)}")
+        except WeatherIngestError as exc:
+            messages.append(f"weather_skipped={exc}")
+
+        try:
+            kalshi = ingest_kalshi_weather_markets(self.settings)
+            messages.append(
+                "kalshi "
+                f"series={kalshi.series_scanned}, "
+                f"markets_written={kalshi.markets_written}, "
+                f"snapshots_written={kalshi.snapshots_written}"
+            )
+            if kalshi.failures:
+                messages.append(f"kalshi_failures={len(kalshi.failures)}")
+        except KalshiIngestError as exc:
+            messages.append(f"kalshi_skipped={exc}")
+
+        return " | ".join(messages)
 
     def build_features(self) -> str:
         return "Feature builder stub complete (rolling windows pending)."
@@ -85,7 +102,7 @@ class DailyPipeline:
 
     def publish_signal_snapshot(self) -> str:
         try:
-            return publish_demo_signal_for_date(self.run_date)
+            return publish_best_signal_for_date(self.run_date)
         except SignalRepositoryError as exc:
             # Pipeline should stay runnable before DB is ready.
             return f"Skipped DB publish: {exc}"

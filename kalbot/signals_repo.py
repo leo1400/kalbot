@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import re
 from datetime import date, datetime, timezone
 
 from psycopg import errors
@@ -73,6 +75,205 @@ def list_current_signals(limit: int = 20) -> list[SignalCard]:
             )
         )
     return results
+
+
+def publish_best_signal_for_date(run_date: date) -> str:
+    try:
+        return publish_live_low_temp_signal(run_date)
+    except SignalRepositoryError:
+        return publish_demo_signal_for_date(run_date)
+
+
+def publish_live_low_temp_signal(run_date: date) -> str:
+    settings: Settings = get_settings()
+    now = datetime.now(timezone.utc)
+
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                  m.id,
+                  m.market_ticker,
+                  m.title,
+                  m.close_time,
+                  COALESCE(ms.last_price_yes, 0.50) AS market_implied_yes
+                FROM markets m
+                LEFT JOIN LATERAL (
+                  SELECT last_price_yes
+                  FROM market_snapshots ms
+                  WHERE ms.market_id = m.id
+                  ORDER BY ms.captured_at DESC
+                  LIMIT 1
+                ) ms ON TRUE
+                WHERE m.market_ticker LIKE 'KXLOWT%-%-T%'
+                  AND (m.close_time IS NULL OR m.close_time > NOW())
+                ORDER BY m.close_time ASC NULLS LAST
+                LIMIT 1
+                """
+            )
+            market = cur.fetchone()
+            if not market:
+                raise SignalRepositoryError("No live KXLOWTNYC market available.")
+
+            threshold = _extract_temperature_threshold(market["market_ticker"])
+            if threshold is None:
+                raise SignalRepositoryError("Could not parse threshold from market ticker.")
+            city_code = _extract_low_temp_city_code(market["market_ticker"])
+            if not city_code:
+                raise SignalRepositoryError("Could not parse city code from market ticker.")
+
+            cur.execute(
+                """
+                SELECT value, unit, valid_at
+                FROM weather_forecasts
+                WHERE station_id = ANY(%s)
+                  AND metric = 'temperature'
+                  AND valid_at >= NOW() - INTERVAL '1 hour'
+                  AND (%s IS NULL OR valid_at <= %s)
+                ORDER BY valid_at ASC
+                """,
+                (_station_candidates(city_code), market["close_time"], market["close_time"]),
+            )
+            rows = cur.fetchall()
+            market_implied_yes = float(market["market_implied_yes"])
+            forecast_temps_f = [_to_fahrenheit(float(r["value"]), str(r["unit"])) for r in rows]
+            projected_low_f = min(forecast_temps_f) if forecast_temps_f else None
+
+            if projected_low_f is not None:
+                model_prob_yes = _sigmoid((threshold - projected_low_f) / 3.5)
+                model_prob_yes = _clamp(model_prob_yes, 0.02, 0.98)
+                confidence = _clamp(
+                    0.55 + abs(model_prob_yes - market_implied_yes), 0.55, 0.95
+                )
+            else:
+                model_prob_yes = market_implied_yes
+                confidence = 0.55
+
+            ci_low = _clamp(model_prob_yes - 0.08, 0.01, 0.99)
+            ci_high = _clamp(model_prob_yes + 0.08, 0.01, 0.99)
+            edge = model_prob_yes - market_implied_yes
+
+            cur.execute(
+                """
+                INSERT INTO model_runs (
+                  model_name, run_type, training_start, training_end,
+                  validation_score, calibration_error, metadata
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                RETURNING id
+                """,
+                (
+                    settings.model_name,
+                    "heuristic_low_temp",
+                    now,
+                    now,
+                    None,
+                    None,
+                    (
+                        "{"
+                        f"\"threshold_f\": {threshold}, "
+                        f"\"projected_low_f\": {projected_low_f:.2f}, "
+                        f"\"market_implied_yes\": {market_implied_yes:.4f}"
+                        "}"
+                    ),
+                ),
+            )
+            model_run_id = cur.fetchone()["id"]
+
+            cur.execute(
+                """
+                INSERT INTO predictions (
+                  model_run_id, market_id, prob_yes, ci_low, ci_high, predicted_at
+                )
+                VALUES (%s, %s, %s, %s, %s, NOW())
+                RETURNING id
+                """,
+                (model_run_id, market["id"], model_prob_yes, ci_low, ci_high),
+            )
+            prediction_id = cur.fetchone()["id"]
+
+            approved = edge >= 0.03
+            reason = (
+                f"Heuristic low-temp model edge={edge:.3f} "
+                f"(city={city_code}, threshold={threshold}F, "
+                f"projected_low={'n/a' if projected_low_f is None else f'{projected_low_f:.1f}F'})"
+            )
+            cur.execute(
+                """
+                INSERT INTO trade_decisions (
+                  prediction_id, edge, threshold, approved, reason, created_at
+                )
+                VALUES (%s, %s, %s, %s, %s, NOW())
+                """,
+                (prediction_id, edge, 0.03, approved, reason),
+            )
+
+            if projected_low_f is not None:
+                rationale = (
+                    f"Kalbot live heuristic: market asks if {city_code} low <= {threshold}F. "
+                    f"NWS forecast projects low around {projected_low_f:.1f}F before close. "
+                    f"Model YES={model_prob_yes:.1%} vs market YES={market_implied_yes:.1%}."
+                )
+            else:
+                rationale = (
+                    f"Kalbot live market-only fallback for {city_code} <= {threshold}F. "
+                    f"No matching weather forecast rows found, so model mirrors market "
+                    f"YES={market_implied_yes:.1%}."
+                )
+            cur.execute(
+                """
+                INSERT INTO published_signals (
+                  market_id, model_run_id, confidence, rationale, data_source_url, is_active, published_at
+                )
+                VALUES (%s, %s, %s, %s, %s, TRUE, NOW())
+                """,
+                (
+                    market["id"],
+                    model_run_id,
+                    confidence,
+                    rationale,
+                    "https://api.weather.gov/",
+                ),
+            )
+
+            cur.execute(
+                """
+                UPDATE published_signals
+                SET is_active = FALSE
+                WHERE market_id = %s
+                  AND model_run_id <> %s
+                  AND is_active = TRUE
+                """,
+                (market["id"], model_run_id),
+            )
+
+            # Deactivate old synthetic/demo signals once a live Kalshi-backed signal exists.
+            cur.execute(
+                """
+                UPDATE published_signals ps
+                SET is_active = FALSE
+                FROM markets m
+                WHERE ps.market_id = m.id
+                  AND m.kalshi_market_id LIKE 'WEATHER-%'
+                  AND ps.is_active = TRUE
+                """
+            )
+
+    except errors.UndefinedTable as exc:
+        raise SignalRepositoryError(
+            "Schema not found. Apply infra/migrations/001_initial_schema.sql first."
+        ) from exc
+    except SignalRepositoryError:
+        raise
+    except Exception as exc:
+        raise SignalRepositoryError(f"Failed to publish live low-temp signal: {exc}") from exc
+
+    return (
+        "Published live low-temp signal for "
+        f"{market['market_ticker']} (city={city_code}, threshold={threshold}F, "
+        f"projected_low={'n/a' if projected_low_f is None else f'{projected_low_f:.1f}F'})."
+    )
 
 
 def publish_demo_signal_for_date(run_date: date) -> str:
@@ -192,3 +393,39 @@ def publish_demo_signal_for_date(run_date: date) -> str:
         raise SignalRepositoryError(f"Failed to publish demo signal: {exc}") from exc
 
     return f"Published demo signal for {market_ticker}."
+
+
+def _extract_temperature_threshold(market_ticker: str) -> float | None:
+    match = re.search(r"-T(\d+(?:\.\d+)?)$", market_ticker)
+    if not match:
+        return None
+    return float(match.group(1))
+
+
+def _extract_low_temp_city_code(market_ticker: str) -> str | None:
+    match = re.search(r"^KXLOWT([A-Z]+)-", market_ticker)
+    if not match:
+        return None
+    return match.group(1)
+
+
+def _station_candidates(city_code: str) -> list[str]:
+    base = city_code.upper()
+    return [f"K{base}", base]
+
+
+def _to_fahrenheit(value: float, unit: str) -> float:
+    upper = unit.upper()
+    if upper in {"F", "DEGF", "WMOUNIT:DEGF"}:
+        return value
+    if upper in {"C", "DEGC", "WMOUNIT:DEGC"}:
+        return (value * 9.0 / 5.0) + 32.0
+    return value
+
+
+def _sigmoid(x: float) -> float:
+    return 1.0 / (1.0 + math.exp(-x))
+
+
+def _clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
