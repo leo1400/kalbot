@@ -19,10 +19,16 @@ from kalbot.performance_repo import (
     get_performance_summary,
     list_recent_orders,
 )
+from kalbot.provenance_repo import (
+    ProvenanceRepositoryError,
+    empty_data_provenance_snapshot,
+    get_data_provenance_snapshot,
+)
 from kalbot.schemas import (
     BotLeaderboardEntry,
     CopyActivityEvent,
     DataQualitySnapshot,
+    DataProvenanceSnapshot,
     DashboardSummary,
     HealthResponse,
     PaperOrderRow,
@@ -159,6 +165,14 @@ def data_quality_snapshot() -> DataQualitySnapshot:
         return get_data_quality_snapshot(target_stations=target_stations)
     except DataQualityRepositoryError:
         return empty_data_quality_snapshot(target_stations=target_stations)
+
+
+@router.get("/v1/data/provenance", response_model=DataProvenanceSnapshot)
+def data_provenance_snapshot() -> DataProvenanceSnapshot:
+    try:
+        return get_data_provenance_snapshot()
+    except ProvenanceRepositoryError:
+        return empty_data_provenance_snapshot()
 
 
 def _count_weather_targets(weather_targets: str) -> int:

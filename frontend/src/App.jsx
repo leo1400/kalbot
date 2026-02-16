@@ -61,6 +61,26 @@ function actionLabel(action) {
   return "Pass";
 }
 
+function statusClass(status) {
+  if (status === "good" || status === "model_ready") {
+    return "status-good";
+  }
+  if (status === "degraded") {
+    return "status-degraded";
+  }
+  return "status-stale";
+}
+
+function modeClass(mode) {
+  if (mode === "real") {
+    return "status-good";
+  }
+  if (mode === "demo") {
+    return "status-degraded";
+  }
+  return "status-stale";
+}
+
 async function fetchJson(url) {
   const response = await fetch(url);
   if (!response.ok) {
@@ -77,6 +97,7 @@ export function App() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [activity, setActivity] = useState([]);
   const [quality, setQuality] = useState(null);
+  const [provenance, setProvenance] = useState(null);
   const [performance, setPerformance] = useState(null);
   const [history, setHistory] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -97,6 +118,7 @@ export function App() {
         ),
         fetchJson(`${API_BASE}/v1/intel/activity?limit=8`),
         fetchJson(`${API_BASE}/v1/data/quality`),
+        fetchJson(`${API_BASE}/v1/data/provenance`),
         fetchJson(`${API_BASE}/v1/performance/summary`),
         fetchJson(`${API_BASE}/v1/performance/history?days=14`),
         fetchJson(`${API_BASE}/v1/performance/orders?limit=8`),
@@ -124,13 +146,16 @@ export function App() {
         setQuality(requests[6].value);
       }
       if (requests[7].status === "fulfilled") {
-        setPerformance(requests[7].value);
+        setProvenance(requests[7].value);
       }
       if (requests[8].status === "fulfilled") {
-        setHistory(requests[8].value);
+        setPerformance(requests[8].value);
       }
       if (requests[9].status === "fulfilled") {
-        setOrders(requests[9].value);
+        setHistory(requests[9].value);
+      }
+      if (requests[10].status === "fulfilled") {
+        setOrders(requests[10].value);
       }
 
       const hasFailure = requests.some((item) => item.status === "rejected");
@@ -157,6 +182,10 @@ export function App() {
     const max = Math.max(...history.map((row) => row.notional_usd), 1);
     return max;
   }, [history]);
+  const sourceMap = useMemo(() => {
+    const rows = provenance?.sources ?? [];
+    return Object.fromEntries(rows.map((row) => [row.source_key, row]));
+  }, [provenance]);
 
   return (
     <main className="page">
@@ -204,6 +233,17 @@ export function App() {
             <p className="value small-value">{topTrader?.display_name ?? "No intel rows"}</p>
             {topTrader ? <p className="small">ROI {topTrader.roi_pct.toFixed(2)}%</p> : null}
           </article>
+        </div>
+        <div className="source-badges">
+          <span className={`source-pill ${modeClass(sourceMap.weather_nws?.mode)}`}>
+            Weather: {(sourceMap.weather_nws?.mode ?? "unknown").toUpperCase()}
+          </span>
+          <span className={`source-pill ${modeClass(sourceMap.kalshi_market_data?.mode)}`}>
+            Kalshi: {(sourceMap.kalshi_market_data?.mode ?? "unknown").toUpperCase()}
+          </span>
+          <span className={`source-pill ${modeClass(sourceMap.bot_intel_feed?.mode)}`}>
+            Bot Intel: {(sourceMap.bot_intel_feed?.mode ?? "unknown").toUpperCase()}
+          </span>
         </div>
       </section>
 
@@ -306,6 +346,58 @@ export function App() {
             </p>
             <p className="small">forecast/snapshot writes</p>
           </article>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <h2>Source Integrity</h2>
+          <p className="small">Shows what is real data vs demo data, and city-level feed readiness.</p>
+        </div>
+        <div className="source-grid">
+          {(provenance?.sources ?? []).map((source) => (
+            <article className="metric-card" key={source.source_key}>
+              <p className="label">{source.source_key.replaceAll("_", " ")}</p>
+              <p className={`metric-main ${statusClass(source.status)}`}>{source.status.toUpperCase()}</p>
+              <p className="small">
+                mode: <strong>{source.mode}</strong>
+              </p>
+              <p className="small">last event: {toLocalTime(source.last_event_utc)}</p>
+              <p className="small">{source.note}</p>
+            </article>
+          ))}
+        </div>
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>City</th>
+                <th>Open Mkts</th>
+                <th>Signal</th>
+                <th>Snapshot Age</th>
+                <th>Forecast Age</th>
+                <th>Coverage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(provenance?.cities ?? []).map((city) => (
+                <tr key={city.city_code}>
+                  <td>
+                    {city.city_name} <span className="small mono">({city.city_code})</span>
+                  </td>
+                  <td>{city.open_market_count}</td>
+                  <td>{city.has_active_signal ? "yes" : "no"}</td>
+                  <td>{toAge(city.latest_snapshot_age_min)}</td>
+                  <td>{toAge(city.latest_forecast_age_min)}</td>
+                  <td>
+                    <span className={`source-pill ${statusClass(city.coverage_status)}`}>
+                      {city.coverage_status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -422,7 +514,12 @@ export function App() {
       <section className="intel-layout">
         <section className="panel">
           <div className="section-head">
-            <h2>Bot Intel Leaderboard</h2>
+            <h2>
+              Bot Intel Leaderboard{" "}
+              <span className={`source-pill ${modeClass(sourceMap.bot_intel_feed?.mode)}`}>
+                {(sourceMap.bot_intel_feed?.mode ?? "unknown").toUpperCase()}
+              </span>
+            </h2>
             <div className="filters">
               <label>
                 Sort
@@ -482,7 +579,12 @@ export function App() {
         </section>
 
         <section className="panel activity-panel">
-          <h2>Copy Activity Tape</h2>
+          <h2>
+            Copy Activity Tape{" "}
+            <span className={`source-pill ${modeClass(sourceMap.bot_intel_feed?.mode)}`}>
+              {(sourceMap.bot_intel_feed?.mode ?? "unknown").toUpperCase()}
+            </span>
+          </h2>
           <p className="small">Recent follow events from tracked leaders.</p>
 
           <div className="activity-list">

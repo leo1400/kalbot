@@ -82,6 +82,13 @@ body {
   flex-wrap: wrap;
 }
 
+.source-badges {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .mode-pill {
   display: inline-flex;
   align-items: center;
@@ -107,6 +114,17 @@ body {
   color: #334f69;
   background: transparent;
   border: 1px solid rgba(51, 79, 105, 0.35);
+}
+
+.source-pill {
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid rgba(90, 111, 133, 0.35);
+  color: #4a5f74;
+  background: rgba(255, 255, 255, 0.65);
 }
 
 h1 {
@@ -165,6 +183,18 @@ h2 {
   background: rgba(178, 79, 79, 0.1);
 }
 
+.status-good {
+  color: var(--mint);
+}
+
+.status-degraded {
+  color: var(--copper);
+}
+
+.status-stale {
+  color: var(--red);
+}
+
 .label {
   margin: 0;
   font-size: 11px;
@@ -217,6 +247,13 @@ h2 {
   display: grid;
   gap: 9px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.source-grid {
+  margin-top: 10px;
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 }
 
 .quality-grid {

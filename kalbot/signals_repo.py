@@ -272,7 +272,11 @@ def publish_live_low_temp_signals(run_date: date) -> str:
             liquid = [c for c in forecasted if c["market_volume"] >= 10]
             pool = liquid if liquid else (forecasted if forecasted else candidates)
             pool.sort(key=lambda c: c["ranking_score"], reverse=True)
-            selected = pool[: settings.signal_publish_limit]
+            selected = _select_diversified_signals(
+                candidates=pool,
+                limit=settings.signal_publish_limit,
+                max_per_city=2,
+            )
 
             # Replace active signal set with the fresh ranked selection.
             cur.execute("UPDATE published_signals SET is_active = FALSE WHERE is_active = TRUE")
@@ -650,6 +654,7 @@ def _city_name_from_code(city_code: str | None) -> str | None:
         "CHI": "Chicago",
         "MIA": "Miami",
         "SF": "San Francisco",
+        "AUS": "Austin",
     }
     upper = city_code.upper()
     return names.get(upper, upper)
@@ -659,11 +664,12 @@ def _station_candidates(city_code: str) -> list[str]:
     base = city_code.upper()
     aliases = {
         "PHIL": ["KPHL", "PHIL", "KPHIL"],
-        "NYC": ["KNYC", "NYC"],
+        "NYC": ["KNYC", "KJFK", "KLGA", "KEWR", "NYC"],
         "LAX": ["KLAX", "LAX"],
         "CHI": ["KORD", "KMDW", "CHI"],
         "MIA": ["KMIA", "MIA"],
         "SF": ["KSFO", "SFO"],
+        "AUS": ["KAUS", "KATT", "AUS"],
     }
     if base in aliases:
         return aliases[base]
@@ -722,6 +728,40 @@ def _condition_label(condition: dict[str, float | str | None]) -> str:
         high = float(condition["high"])
         return f"{low}-{high}F"
     return "unknown"
+
+
+def _select_diversified_signals(
+    candidates: list[dict], limit: int, max_per_city: int = 2
+) -> list[dict]:
+    if limit <= 0 or not candidates:
+        return []
+
+    selected: list[dict] = []
+    city_counts: dict[str, int] = {}
+
+    # Pass 1: capture top-ranked unique cities first.
+    for candidate in candidates:
+        city = str(candidate.get("city_code") or "UNKNOWN")
+        if city in city_counts:
+            continue
+        selected.append(candidate)
+        city_counts[city] = 1
+        if len(selected) >= limit:
+            return selected
+
+    # Pass 2: fill remaining slots with best leftovers, bounded per city.
+    for candidate in candidates:
+        if candidate in selected:
+            continue
+        city = str(candidate.get("city_code") or "UNKNOWN")
+        if city_counts.get(city, 0) >= max_per_city:
+            continue
+        selected.append(candidate)
+        city_counts[city] = city_counts.get(city, 0) + 1
+        if len(selected) >= limit:
+            break
+
+    return selected
 
 
 def _derive_playbook_action(edge: float, confidence: float, edge_threshold: float) -> str:

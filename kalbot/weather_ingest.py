@@ -42,7 +42,7 @@ def ingest_weather_data(settings: Settings) -> WeatherIngestSummary:
     if not targets:
         raise WeatherIngestError("No weather targets configured.")
 
-    summary = WeatherIngestSummary(targets_attempted=len(targets))
+    summary = WeatherIngestSummary(targets_attempted=0)
     headers = {
         "User-Agent": settings.weather_user_agent,
         "Accept": "application/geo+json",
@@ -50,6 +50,8 @@ def ingest_weather_data(settings: Settings) -> WeatherIngestSummary:
 
     try:
         with get_connection() as conn, conn.cursor() as cur:
+            targets = _augment_targets_with_market_cities(cur=cur, targets=targets)
+            summary.targets_attempted = len(targets)
             for target in targets:
                 try:
                     _ingest_target(
@@ -91,6 +93,46 @@ def parse_weather_targets(raw: str) -> list[WeatherTarget]:
         except ValueError:
             continue
     return targets
+
+
+def _augment_targets_with_market_cities(cur: Any, targets: list[WeatherTarget]) -> list[WeatherTarget]:
+    target_by_name = {t.name.lower(): t for t in targets}
+    cur.execute(
+        """
+        SELECT DISTINCT regexp_replace(market_ticker, '^KXLOWT([A-Z]+)-.*$', '\\1') AS city_code
+        FROM markets
+        WHERE market_ticker LIKE 'KXLOWT%-26%'
+        """
+    )
+    rows = cur.fetchall()
+
+    for row in rows:
+        city_code = str(row["city_code"]).lower()
+        if city_code in target_by_name:
+            continue
+        coords = _city_coordinates(city_code)
+        if coords is None:
+            continue
+        target_by_name[city_code] = WeatherTarget(
+            name=city_code,
+            latitude=coords[0],
+            longitude=coords[1],
+        )
+
+    return list(target_by_name.values())
+
+
+def _city_coordinates(city_code: str) -> tuple[float, float] | None:
+    lookup = {
+        "nyc": (40.7128, -74.0060),
+        "chi": (41.8781, -87.6298),
+        "mia": (25.7617, -80.1918),
+        "lax": (33.9416, -118.4085),
+        "aus": (30.2672, -97.7431),
+        "phil": (39.9526, -75.1652),
+        "sf": (37.7749, -122.4194),
+    }
+    return lookup.get(city_code.lower())
 
 
 def _ingest_target(

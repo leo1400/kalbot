@@ -35,6 +35,10 @@ This page explains Kalbot in plain English.
    - Start with paper sizing shown in the playbook.
    - Do not increase size until you have many days of stable performance.
 
+## Why all signals can come from one city
+
+If one city has both fresh Kalshi snapshots and fresh weather forecasts, while others only have market data, the model may publish mostly from that city. Use the `Source Integrity` city table to verify which cities are `model_ready` vs `market_only`.
+
 ## Terms
 
 - `YES share`: pays $1 if event happens.

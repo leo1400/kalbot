@@ -111,3 +111,27 @@ class PaperOrderRow(BaseModel):
     limit_price: float
     status: str
     edge: float
+
+
+class SourceProvenanceRow(BaseModel):
+    source_key: str
+    mode: str
+    status: str
+    last_event_utc: datetime | None
+    note: str
+
+
+class CityProvenanceRow(BaseModel):
+    city_code: str
+    city_name: str
+    open_market_count: int
+    has_active_signal: bool
+    latest_snapshot_age_min: float | None
+    latest_forecast_age_min: float | None
+    coverage_status: str
+
+
+class DataProvenanceSnapshot(BaseModel):
+    generated_at_utc: datetime
+    sources: list[SourceProvenanceRow]
+    cities: list[CityProvenanceRow]

@@ -6,6 +6,8 @@ from kalbot.signals_repo import (
     _extract_temperature_threshold,
     _parse_low_temp_condition,
     _playbook_entry_price,
+    _select_diversified_signals,
+    _station_candidates,
     _suggested_notional,
 )
 
@@ -25,7 +27,16 @@ def test_extract_low_temp_city_code() -> None:
 
 def test_city_name_from_code() -> None:
     assert _city_name_from_code("LAX") == "Los Angeles"
+    assert _city_name_from_code("AUS") == "Austin"
     assert _city_name_from_code("ABC") == "ABC"
+
+
+def test_station_candidates_include_real_airport_aliases() -> None:
+    nyc = _station_candidates("NYC")
+    aus = _station_candidates("AUS")
+    assert "KJFK" in nyc
+    assert "KLGA" in nyc
+    assert "KATT" in aus
 
 
 def test_parse_low_temp_condition_range() -> None:
@@ -65,3 +76,15 @@ def test_playbook_entry_price_for_no_side() -> None:
 
 def test_suggested_notional_zero_for_pass() -> None:
     assert _suggested_notional("pass", confidence=0.9, edge=0.2, max_notional=120.0, edge_threshold=0.03) == 0.0
+
+
+def test_select_diversified_signals_prefers_city_spread() -> None:
+    candidates = [
+        {"city_code": "LAX", "ranking_score": 0.9, "id": 1},
+        {"city_code": "LAX", "ranking_score": 0.8, "id": 2},
+        {"city_code": "AUS", "ranking_score": 0.7, "id": 3},
+        {"city_code": "PHIL", "ranking_score": 0.6, "id": 4},
+    ]
+    selected = _select_diversified_signals(candidates, limit=3, max_per_city=2)
+    ids = [row["id"] for row in selected]
+    assert ids == [1, 3, 4]

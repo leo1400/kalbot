@@ -58,6 +58,7 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
 - Performance history endpoint: `http://localhost:8000/v1/performance/history?days=14`
 - Performance orders endpoint: `http://localhost:8000/v1/performance/orders?limit=12`
 - Data quality endpoint: `http://localhost:8000/v1/data/quality`
+- Data provenance endpoint: `http://localhost:8000/v1/data/provenance`
 
 ## Beginner guide
 
@@ -79,7 +80,7 @@ Daily run summaries are written to `artifacts/daily/<YYYY-MM-DD>/run-summary.jso
   - `weather_forecasts`
   - `weather_observations`
 - Configure targets with:
-  - `KALBOT_WEATHER_TARGETS=nyc:40.7128,-74.0060;chi:41.8781,-87.6298;mia:25.7617,-80.1918`
+  - `KALBOT_WEATHER_TARGETS=nyc:40.7128,-74.0060;chi:41.8781,-87.6298;mia:25.7617,-80.1918;lax:33.9416,-118.4085;aus:30.2672,-97.7431;phil:39.9526,-75.1652`
 
 ## Kalshi ingestion
 

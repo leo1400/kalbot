@@ -39,7 +39,8 @@ class Settings(BaseSettings):
     weather_targets: str = Field(
         default=(
             "nyc:40.7128,-74.0060;chi:41.8781,-87.6298;"
-            "mia:25.7617,-80.1918;lax:33.9416,-118.4085"
+            "mia:25.7617,-80.1918;lax:33.9416,-118.4085;"
+            "aus:30.2672,-97.7431;phil:39.9526,-75.1652"
         )
     )
     weather_forecast_hours: int = Field(default=24)
