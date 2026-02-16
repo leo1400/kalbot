@@ -22,7 +22,7 @@ Push-Location $repoRoot
 try {
   docker compose --profile ui up -d frontend
   Write-Host "Frontend running in Docker at http://localhost:5173"
-  Write-Host "If backend runs on host, keep it on port 8000 for host.docker.internal routing."
+  Write-Host "Backend should be reachable at http://localhost:8000"
 }
 finally {
   Pop-Location
