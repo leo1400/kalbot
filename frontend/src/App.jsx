@@ -101,6 +101,7 @@ export function App() {
   const [performance, setPerformance] = useState(null);
   const [history, setHistory] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [accuracy, setAccuracy] = useState(null);
   const [sort, setSort] = useState("impressiveness");
   const [window, setWindow] = useState("all");
   const [error, setError] = useState("");
@@ -122,6 +123,7 @@ export function App() {
         fetchJson(`${API_BASE}/v1/performance/summary`),
         fetchJson(`${API_BASE}/v1/performance/history?days=14`),
         fetchJson(`${API_BASE}/v1/performance/orders?limit=8`),
+        fetchJson(`${API_BASE}/v1/performance/accuracy?days=30`),
       ]);
 
       if (requests[0].status === "fulfilled") {
@@ -157,6 +159,9 @@ export function App() {
       if (requests[10].status === "fulfilled") {
         setOrders(requests[10].value);
       }
+      if (requests[11].status === "fulfilled") {
+        setAccuracy(requests[11].value);
+      }
 
       const hasFailure = requests.some((item) => item.status === "rejected");
       if (hasFailure) {
@@ -186,6 +191,15 @@ export function App() {
     const rows = provenance?.sources ?? [];
     return Object.fromEntries(rows.map((row) => [row.source_key, row]));
   }, [provenance]);
+  const brierText = accuracy?.brier_score === null || accuracy?.brier_score === undefined
+    ? "n/a"
+    : accuracy.brier_score.toFixed(4);
+  const logLossText = accuracy?.log_loss === null || accuracy?.log_loss === undefined
+    ? "n/a"
+    : accuracy.log_loss.toFixed(4);
+  const calText = accuracy?.calibration_error === null || accuracy?.calibration_error === undefined
+    ? "n/a"
+    : toPercent(accuracy.calibration_error, 2);
 
   return (
     <main className="page">
@@ -222,6 +236,11 @@ export function App() {
           <article className="chip">
             <p className="label">Notional 24h</p>
             <p className="value">{toUsd(performance?.notional_24h_usd ?? 0)}</p>
+          </article>
+          <article className="chip">
+            <p className="label">Brier 30D</p>
+            <p className="value small-value">{brierText}</p>
+            <p className="small">{accuracy?.resolved_markets ?? 0} settled mkts</p>
           </article>
           <article className={`chip ${qualityTone}`}>
             <p className="label">Data Status</p>
@@ -314,6 +333,32 @@ export function App() {
               <p className="small">No paper orders yet.</p>
             ) : null}
           </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-head">
+          <h2>Model Accuracy (Settled)</h2>
+          <p className="small">
+            Latest metric day: {accuracy?.latest_metric_date ?? "n/a"} (window {accuracy?.window_days ?? 30}d)
+          </p>
+        </div>
+        <div className="execution-grid">
+          <article className="metric-card">
+            <p className="label">Brier Score</p>
+            <p className="metric-main">{brierText}</p>
+            <p className="small">Lower is better (0 is perfect)</p>
+          </article>
+          <article className="metric-card">
+            <p className="label">Log Loss</p>
+            <p className="metric-main">{logLossText}</p>
+            <p className="small">Penalty for overconfident misses</p>
+          </article>
+          <article className="metric-card">
+            <p className="label">Calibration Error</p>
+            <p className="metric-main">{calText}</p>
+            <p className="small">Average probability miss</p>
+          </article>
         </div>
       </section>
 
@@ -607,7 +652,7 @@ export function App() {
             ))}
 
             {activity.length === 0 && !error ? (
-              <p className="small">No activity yet. Configure a bot intel feed path or URL to populate this tape.</p>
+              <p className="small">No copy activity feed yet. Leaderboard still updates from Polymarket by default.</p>
             ) : null}
           </div>
         </section>

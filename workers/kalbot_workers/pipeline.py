@@ -13,6 +13,7 @@ from kalbot.modeling.low_temp_model import (
     train_low_temp_model,
 )
 from kalbot.paper_execution import PaperExecutionError, execute_paper_trades
+from kalbot.settlement_repo import SettlementRepositoryError, reconcile_settlements
 from kalbot.signals_repo import SignalRepositoryError, publish_best_signal_for_date
 from kalbot.settings import get_settings
 from kalbot.weather_ingest import WeatherIngestError, ingest_weather_data
@@ -110,6 +111,12 @@ class DailyPipeline:
     def score_and_decide(self) -> str:
         return "Signal scoring complete (edge-based trade decisions written per prediction)."
 
+    def reconcile_market_outcomes(self) -> str:
+        try:
+            return reconcile_settlements(self.run_date, settings=self.settings)
+        except SettlementRepositoryError as exc:
+            return f"Settlement reconcile skipped: {exc}"
+
     def simulate_execution(self) -> str:
         try:
             return execute_paper_trades(self.run_date)
@@ -132,6 +139,7 @@ class DailyPipeline:
     def run(self) -> PipelineSummary:
         started_at = datetime.now(timezone.utc)
         self._run_step("ingest_data", self.ingest_data)
+        self._run_step("reconcile_market_outcomes", self.reconcile_market_outcomes)
         self._run_step("build_features", self.build_features)
         self._run_step("train_and_calibrate", self.train_and_calibrate)
         self._run_step("score_and_decide", self.score_and_decide)

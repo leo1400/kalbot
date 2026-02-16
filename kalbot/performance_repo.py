@@ -3,7 +3,13 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from kalbot.db import get_connection
-from kalbot.schemas import PaperOrderRow, PerformanceHistoryPoint, PerformanceSummary
+from kalbot.schemas import (
+    AccuracyHistoryPoint,
+    AccuracySummary,
+    PaperOrderRow,
+    PerformanceHistoryPoint,
+    PerformanceSummary,
+)
 
 
 class PerformanceRepositoryError(RuntimeError):
@@ -117,6 +123,149 @@ def get_performance_history(days: int = 14, execution_mode: str = "paper") -> li
     return points
 
 
+def get_accuracy_summary(days: int = 30, execution_mode: str = "paper") -> AccuracySummary:
+    since_date = date.today() - timedelta(days=max(days - 1, 0))
+
+    query = """
+        WITH scored AS (
+          SELECT
+            dm.metric_date,
+            dm.brier_score::float8 AS brier_score,
+            dm.log_loss::float8 AS log_loss,
+            dm.calibration_error::float8 AS calibration_error,
+            COALESCE((
+              SELECT COUNT(*)
+              FROM settlements s
+              JOIN LATERAL (
+                SELECT p.predicted_at
+                FROM predictions p
+                WHERE p.market_id = s.market_id
+                  AND p.predicted_at <= s.settled_at
+                ORDER BY p.predicted_at DESC
+                LIMIT 1
+              ) pred ON TRUE
+              WHERE s.settled_at::date = dm.metric_date
+            ), 0) AS resolved_markets
+          FROM daily_metrics dm
+          WHERE dm.execution_mode = %s
+            AND dm.metric_date >= %s
+        )
+        SELECT
+          COALESCE(SUM(scored.resolved_markets), 0) AS resolved_markets,
+          MAX(scored.metric_date) AS latest_metric_date,
+          CASE
+            WHEN COALESCE(SUM(scored.resolved_markets), 0) > 0
+              THEN SUM(scored.brier_score * scored.resolved_markets)::float8
+                / SUM(scored.resolved_markets)::float8
+          END AS brier_score,
+          CASE
+            WHEN COALESCE(SUM(scored.resolved_markets), 0) > 0
+              THEN SUM(scored.log_loss * scored.resolved_markets)::float8
+                / SUM(scored.resolved_markets)::float8
+          END AS log_loss,
+          CASE
+            WHEN COALESCE(SUM(scored.resolved_markets), 0) > 0
+              THEN SUM(scored.calibration_error * scored.resolved_markets)::float8
+                / SUM(scored.resolved_markets)::float8
+          END AS calibration_error
+        FROM scored
+    """
+
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(query, (execution_mode, since_date))
+            row = cur.fetchone()
+    except Exception as exc:
+        raise PerformanceRepositoryError(f"Failed to load accuracy summary: {exc}") from exc
+
+    latest = row["latest_metric_date"]
+    return AccuracySummary(
+        window_days=days,
+        resolved_markets=int(row["resolved_markets"] or 0),
+        latest_metric_date=latest.isoformat() if latest else None,
+        brier_score=_float_or_none(row["brier_score"]),
+        log_loss=_float_or_none(row["log_loss"]),
+        calibration_error=_float_or_none(row["calibration_error"]),
+    )
+
+
+def get_accuracy_history(
+    days: int = 30, execution_mode: str = "paper"
+) -> list[AccuracyHistoryPoint]:
+    since_date = date.today() - timedelta(days=max(days - 1, 0))
+    query = """
+        SELECT
+          dm.metric_date,
+          dm.brier_score::float8 AS brier_score,
+          dm.log_loss::float8 AS log_loss,
+          dm.calibration_error::float8 AS calibration_error,
+          dm.gross_pnl::float8 AS gross_pnl,
+          dm.net_pnl::float8 AS net_pnl,
+          dm.max_drawdown::float8 AS max_drawdown,
+          COALESCE((
+            SELECT COUNT(*)
+            FROM settlements s
+            JOIN LATERAL (
+              SELECT p.predicted_at
+              FROM predictions p
+              WHERE p.market_id = s.market_id
+                AND p.predicted_at <= s.settled_at
+              ORDER BY p.predicted_at DESC
+              LIMIT 1
+            ) pred ON TRUE
+            WHERE s.settled_at::date = dm.metric_date
+          ), 0) AS resolved_markets
+        FROM daily_metrics dm
+        WHERE dm.execution_mode = %s
+          AND dm.metric_date >= %s
+        ORDER BY dm.metric_date ASC
+    """
+
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(query, (execution_mode, since_date))
+            rows = cur.fetchall()
+    except Exception as exc:
+        raise PerformanceRepositoryError(f"Failed to load accuracy history: {exc}") from exc
+
+    by_day: dict[date, AccuracyHistoryPoint] = {}
+    for row in rows:
+        metric_date = row["metric_date"]
+        by_day[metric_date] = AccuracyHistoryPoint(
+            day=metric_date.isoformat(),
+            resolved_markets=int(row["resolved_markets"] or 0),
+            brier_score=_float_or_none(row["brier_score"]),
+            log_loss=_float_or_none(row["log_loss"]),
+            calibration_error=_float_or_none(row["calibration_error"]),
+            gross_pnl=float(row["gross_pnl"] or 0.0),
+            net_pnl=float(row["net_pnl"] or 0.0),
+            max_drawdown=_float_or_none(row["max_drawdown"]),
+        )
+
+    points: list[AccuracyHistoryPoint] = []
+    current = since_date
+    end = date.today()
+    while current <= end:
+        point = by_day.get(current)
+        if point is None:
+            points.append(
+                AccuracyHistoryPoint(
+                    day=current.isoformat(),
+                    resolved_markets=0,
+                    brier_score=None,
+                    log_loss=None,
+                    calibration_error=None,
+                    gross_pnl=0.0,
+                    net_pnl=0.0,
+                    max_drawdown=None,
+                )
+            )
+        else:
+            points.append(point)
+        current += timedelta(days=1)
+    return points
+
+
 def empty_performance_summary() -> PerformanceSummary:
     return PerformanceSummary(
         total_orders=0,
@@ -166,3 +315,20 @@ def list_recent_orders(limit: int = 20, execution_mode: str = "paper") -> list[P
         )
         for row in rows
     ]
+
+
+def empty_accuracy_summary(days: int = 30) -> AccuracySummary:
+    return AccuracySummary(
+        window_days=days,
+        resolved_markets=0,
+        latest_metric_date=None,
+        brier_score=None,
+        log_loss=None,
+        calibration_error=None,
+    )
+
+
+def _float_or_none(raw) -> float | None:
+    if raw is None:
+        return None
+    return float(raw)

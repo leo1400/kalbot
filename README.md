@@ -60,6 +60,8 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
 - Performance summary endpoint: `http://localhost:8000/v1/performance/summary`
 - Performance history endpoint: `http://localhost:8000/v1/performance/history?days=14`
 - Performance orders endpoint: `http://localhost:8000/v1/performance/orders?limit=12`
+- Accuracy summary endpoint: `http://localhost:8000/v1/performance/accuracy?days=30`
+- Accuracy history endpoint: `http://localhost:8000/v1/performance/accuracy/history?days=30`
 - Data quality endpoint: `http://localhost:8000/v1/data/quality`
 - Data provenance endpoint: `http://localhost:8000/v1/data/provenance`
 
@@ -144,3 +146,12 @@ Daily run summaries are written to `artifacts/daily/<YYYY-MM-DD>/run-summary.jso
 - Orders and positions are written to:
   - `orders`
   - `positions`
+
+## Settlement + accuracy loop
+
+- Daily worker now reconciles finalized Kalshi outcomes for tracked `KXLOWT` markets.
+- It writes settlement rows to:
+  - `settlements`
+- It closes open paper positions when a market settles and computes realized PnL.
+- It writes daily forecast quality + pnl stats to:
+  - `daily_metrics` (`brier_score`, `log_loss`, `calibration_error`, `gross_pnl`, `max_drawdown`)

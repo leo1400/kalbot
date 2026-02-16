@@ -73,6 +73,26 @@ class PerformanceHistoryPoint(BaseModel):
     notional_usd: float
 
 
+class AccuracySummary(BaseModel):
+    window_days: int
+    resolved_markets: int
+    latest_metric_date: str | None
+    brier_score: float | None
+    log_loss: float | None
+    calibration_error: float | None
+
+
+class AccuracyHistoryPoint(BaseModel):
+    day: str
+    resolved_markets: int
+    brier_score: float | None
+    log_loss: float | None
+    calibration_error: float | None
+    gross_pnl: float
+    net_pnl: float
+    max_drawdown: float | None
+
+
 class DataQualitySnapshot(BaseModel):
     target_stations: int
     stations_with_forecast_6h: int

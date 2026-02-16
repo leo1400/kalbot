@@ -14,6 +14,9 @@ from kalbot.data_quality_repo import (
 )
 from kalbot.performance_repo import (
     PerformanceRepositoryError,
+    empty_accuracy_summary,
+    get_accuracy_history,
+    get_accuracy_summary,
     empty_performance_summary,
     get_performance_history,
     get_performance_summary,
@@ -25,6 +28,8 @@ from kalbot.provenance_repo import (
     get_data_provenance_snapshot,
 )
 from kalbot.schemas import (
+    AccuracyHistoryPoint,
+    AccuracySummary,
     BotLeaderboardEntry,
     CopyActivityEvent,
     DataQualitySnapshot,
@@ -137,6 +142,26 @@ def performance_orders(limit: int = Query(default=12, ge=1, le=100)) -> list[Pap
     settings = get_settings()
     try:
         return list_recent_orders(limit=limit, execution_mode=settings.execution_mode)
+    except PerformanceRepositoryError:
+        return []
+
+
+@router.get("/v1/performance/accuracy", response_model=AccuracySummary)
+def performance_accuracy(days: int = Query(default=30, ge=7, le=180)) -> AccuracySummary:
+    settings = get_settings()
+    try:
+        return get_accuracy_summary(days=days, execution_mode=settings.execution_mode)
+    except PerformanceRepositoryError:
+        return empty_accuracy_summary(days=days)
+
+
+@router.get("/v1/performance/accuracy/history", response_model=list[AccuracyHistoryPoint])
+def performance_accuracy_history(
+    days: int = Query(default=30, ge=7, le=180),
+) -> list[AccuracyHistoryPoint]:
+    settings = get_settings()
+    try:
+        return get_accuracy_history(days=days, execution_mode=settings.execution_mode)
     except PerformanceRepositoryError:
         return []
 
