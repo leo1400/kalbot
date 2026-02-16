@@ -29,7 +29,8 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
 2. Install Python dependencies from `pyproject.toml`.
 3. Copy `.env.example` to `.env` and set values.
 4. Start Postgres:
-   - `docker compose -f infra/docker-compose.yml up -d`
+   - `docker compose up -d`
+   - or `docker compose -f infra/docker-compose.yml up -d`
 5. Apply migration:
    - `psql "postgresql://postgres:postgres@localhost:5432/kalbot" -f infra/migrations/001_initial_schema.sql`
    - `psql "postgresql://postgres:postgres@localhost:5432/kalbot" -f infra/migrations/002_bot_intel.sql`
