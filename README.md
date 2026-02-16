@@ -53,6 +53,8 @@ Build a transparent, data-driven weather trading engine with daily retraining, p
 - Dashboard summary endpoint: `http://localhost:8000/v1/dashboard/summary`
 - Bot intel leaderboard: `http://localhost:8000/v1/intel/leaderboard?sort=impressiveness&window=all&limit=10`
 - Copy activity endpoint: `http://localhost:8000/v1/intel/activity?limit=12`
+- Performance summary endpoint: `http://localhost:8000/v1/performance/summary`
+- Performance history endpoint: `http://localhost:8000/v1/performance/history?days=14`
 
 ## No npm on Windows
 
@@ -93,3 +95,14 @@ Daily run summaries are written to `artifacts/daily/<YYYY-MM-DD>/run-summary.jso
 - `train_and_calibrate` step trains a baseline low-temp uncertainty model and writes:
   - `artifacts/models/low_temp_model_latest.json`
 - Live signal publishing uses this model (with market-title condition parsing) before falling back.
+
+## Paper execution loop
+
+- `simulate_execution` now places paper orders from active signals using risk caps:
+  - `KALBOT_PAPER_EDGE_THRESHOLD`
+  - `KALBOT_MAX_NOTIONAL_PER_SIGNAL_USD`
+  - `KALBOT_MAX_DAILY_NOTIONAL_USD`
+  - `KALBOT_MAX_CONTRACTS_PER_ORDER`
+- Orders and positions are written to:
+  - `orders`
+  - `positions`

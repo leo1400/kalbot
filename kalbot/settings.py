@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     model_name: str = Field(default="baseline-logit-v1")
     model_refresh_hour_utc: int = Field(default=4)
     signal_publish_limit: int = Field(default=4)
+    paper_edge_threshold: float = Field(default=0.03)
+    max_notional_per_signal_usd: float = Field(default=125.0)
+    max_daily_notional_usd: float = Field(default=500.0)
+    max_contracts_per_order: int = Field(default=25)
 
     weather_api_base: str = Field(default="https://api.weather.gov")
     weather_user_agent: str = Field(default="kalbot-dev (kalbot@example.com)")

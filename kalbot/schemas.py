@@ -52,3 +52,19 @@ class CopyActivityEvent(BaseModel):
     side: str
     contracts: int
     pnl_usd: float
+
+
+class PerformanceSummary(BaseModel):
+    total_orders: int
+    orders_24h: int
+    approved_decisions_24h: int
+    open_positions: int
+    notional_24h_usd: float
+    open_notional_usd: float
+    realized_pnl_usd: float
+
+
+class PerformanceHistoryPoint(BaseModel):
+    day: str
+    orders: int
+    notional_usd: float

@@ -7,11 +7,19 @@ from kalbot.bot_intel_repo import (
     get_bot_leaderboard,
     list_recent_copy_activity,
 )
+from kalbot.performance_repo import (
+    PerformanceRepositoryError,
+    empty_performance_summary,
+    get_performance_history,
+    get_performance_summary,
+)
 from kalbot.schemas import (
     BotLeaderboardEntry,
     CopyActivityEvent,
     DashboardSummary,
     HealthResponse,
+    PerformanceHistoryPoint,
+    PerformanceSummary,
     SignalCard,
 )
 from kalbot.signals_repo import (
@@ -95,4 +103,22 @@ def copy_activity(limit: int = Query(default=12, ge=1, le=100)) -> list[CopyActi
     try:
         return list_recent_copy_activity(limit=limit)
     except BotIntelRepositoryError:
+        return []
+
+
+@router.get("/v1/performance/summary", response_model=PerformanceSummary)
+def performance_summary() -> PerformanceSummary:
+    settings = get_settings()
+    try:
+        return get_performance_summary(execution_mode=settings.execution_mode)
+    except PerformanceRepositoryError:
+        return empty_performance_summary()
+
+
+@router.get("/v1/performance/history", response_model=list[PerformanceHistoryPoint])
+def performance_history(days: int = Query(default=14, ge=3, le=90)) -> list[PerformanceHistoryPoint]:
+    settings = get_settings()
+    try:
+        return get_performance_history(days=days, execution_mode=settings.execution_mode)
+    except PerformanceRepositoryError:
         return []

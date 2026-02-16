@@ -12,6 +12,7 @@ from kalbot.modeling.low_temp_model import (
     build_low_temp_training_features,
     train_low_temp_model,
 )
+from kalbot.paper_execution import PaperExecutionError, execute_paper_trades
 from kalbot.signals_repo import SignalRepositoryError, publish_best_signal_for_date
 from kalbot.settings import get_settings
 from kalbot.weather_ingest import WeatherIngestError, ingest_weather_data
@@ -107,11 +108,13 @@ class DailyPipeline:
             return f"Model train skipped: {exc}"
 
     def score_and_decide(self) -> str:
-        return "Decision stub complete (edge thresholds and risk caps pending)."
+        return "Signal scoring complete (edge-based trade decisions written per prediction)."
 
     def simulate_execution(self) -> str:
-        mode = self.settings.execution_mode
-        return f"Execution stub complete (current mode={mode})."
+        try:
+            return execute_paper_trades(self.run_date)
+        except PaperExecutionError as exc:
+            return f"Execution skipped: {exc}"
 
     def update_bot_intel(self) -> str:
         try:
